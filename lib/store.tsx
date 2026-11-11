@@ -1,25 +1,36 @@
-// Trạng thái dùng chung: cài đặt kết nối + danh sách việc + đồng bộ nhắc việc.
+// Trạng thái dùng chung: phiên đăng nhập + cài đặt + danh sách việc + đồng bộ nhắc việc.
+//
+// Mở lại app (kể cả sau khi đóng hẳn): khôi phục phiên từ refresh token trong Keychain/Keystore,
+// hiện ngay danh sách việc đã lưu, rồi tải mới từ server. Người dùng không phải đăng nhập lại.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
-import { api, type Conn } from './api';
+import { api, ApiError, authApi, onSessionExpired, setBaseUrl } from './api';
+import { googleSignIn, googleSignOut } from './google';
 import { clearReminders, ensurePermission, syncReminders } from './notifications';
-import type { Health, Task } from './types';
+import type { Health, PublicConfig, Task, User } from './types';
 
-const KEY = 'mstudent.settings.v1';
-export const DEFAULT_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
+const SETTINGS_KEY = 'mstudent.settings.v2';
+const USER_KEY = 'mstudent.user.v1';
+const tasksKey = (userId: number) => `mstudent.tasks.v1.${userId}`;
+
+export const DEFAULT_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const DEVICE = `${Constants.deviceName ?? 'thiết bị'} (${Platform.OS})`.slice(0, 100);
 
 export interface Settings {
   baseUrl: string;
-  token: string;
   remindersOn: boolean;
 }
 
+export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+
 interface Store {
-  ready: boolean;
+  status: AuthStatus;
+  user: User | null;
   settings: Settings;
-  conn: Conn;
   updateSettings: (s: Partial<Settings>) => Promise<void>;
   health: Health | null;
   now: Date; // giờ của server (để demo với MSTUDENT_NOW) hoặc giờ máy
@@ -27,6 +38,11 @@ interface Store {
   loading: boolean;
   error: string | null;
   scheduled: number;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signInWithGoogle: (cfg: PublicConfig['google']) => Promise<boolean>;
+  signOut: () => Promise<void>;
+  reloadUser: () => Promise<void>;
   refresh: () => Promise<void>;
   markDone: (id: number) => Promise<void>;
   moveTask: (id: number, dueAt: string) => Promise<void>;
@@ -34,55 +50,112 @@ interface Store {
 
 const Ctx = createContext<Store | null>(null);
 
+async function readJson<T>(key: string): Promise<T | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
-  const [settings, setSettings] = useState<Settings>({ baseUrl: DEFAULT_URL, token: '', remindersOn: true });
+  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [user, setUser] = useState<User | null>(null);
+  const [settings, setSettings] = useState<Settings>({ baseUrl: DEFAULT_URL, remindersOn: true });
   const [health, setHealth] = useState<Health | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduled, setScheduled] = useState(0);
-  const conn = useMemo(() => ({ baseUrl: settings.baseUrl, token: settings.token }), [settings]);
   const nowOffset = useRef(0); // chênh lệch giữa giờ server và giờ máy
+  const userRef = useRef<User | null>(null);
 
-  useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => raw && setSettings((s) => ({ ...s, ...JSON.parse(raw) })))
-      .catch(() => {})
-      .finally(() => setReady(true));
+  const enter = useCallback(async (u: User) => {
+    userRef.current = u;
+    setUser(u);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(u)).catch(() => {});
+    const cached = await readJson<Task[]>(tasksKey(u.id));
+    if (cached) setTasks(cached); // có ngay nội dung trước khi mạng trả lời
+    setStatus('signedIn');
   }, []);
 
+  const leave = useCallback(async () => {
+    const u = userRef.current;
+    userRef.current = null;
+    setUser(null);
+    setTasks([]);
+    setStatus('signedOut');
+    await clearReminders().catch(() => {});
+    setScheduled(0);
+    await AsyncStorage.multiRemove([USER_KEY, ...(u ? [tasksKey(u.id)] : [])]).catch(() => {});
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!userRef.current) return;
+    setLoading(true);
+    try {
+      const h = await api.health();
+      nowOffset.current = new Date(h.now).getTime() - Date.now();
+      setHealth(h);
+      const list = await api.tasks();
+      setTasks(list);
+      setError(null);
+      if (userRef.current) AsyncStorage.setItem(tasksKey(userRef.current.id), JSON.stringify(list)).catch(() => {});
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) {
+        setError((e as Error).message);
+        setHealth(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Khởi động: nạp cài đặt → khôi phục phiên.
+  useEffect(() => {
+    onSessionExpired(() => {
+      leave();
+    });
+    (async () => {
+      const saved = await readJson<Partial<Settings>>(SETTINGS_KEY);
+      const merged = { baseUrl: DEFAULT_URL, remindersOn: true, ...saved };
+      setSettings(merged);
+      setBaseUrl(merged.baseUrl);
+      const r = merged.baseUrl ? await authApi.restore() : ({ state: 'none' } as const);
+      if (r.state === 'ok') {
+        await enter(r.user);
+      } else if (r.state === 'offline') {
+        // Server tạm thời không gọi được: vẫn vào app với dữ liệu đã lưu, không bắt đăng nhập lại.
+        const cachedUser = await readJson<User>(USER_KEY);
+        if (cachedUser) {
+          await enter(cachedUser);
+          setError('Không kết nối được server — đang hiện dữ liệu đã lưu');
+        } else {
+          setStatus('signedOut');
+        }
+      } else {
+        setStatus('signedOut');
+      }
+    })();
+  }, [enter, leave]);
+
+  useEffect(() => {
+    if (status === 'signedIn') refresh();
+  }, [status, refresh]);
+
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
+    if (patch.baseUrl !== undefined) setBaseUrl(patch.baseUrl);
     setSettings((s) => {
       const next = { ...s, ...patch };
-      AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
+      AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const h = await api.health(conn);
-      nowOffset.current = new Date(h.now).getTime() - Date.now();
-      setHealth(h);
-      setTasks(await api.tasks(conn));
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-      setHealth(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [conn]);
-
-  useEffect(() => {
-    if (ready) refresh();
-  }, [ready, refresh]);
-
   // Mỗi khi danh sách việc đổi → đặt lại thông báo trên máy.
   useEffect(() => {
-    if (!ready) return;
+    if (status !== 'signedIn') return;
     (async () => {
       if (!settings.remindersOn) {
         await clearReminders();
@@ -91,43 +164,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (await ensurePermission()) setScheduled(await syncReminders(tasks, new Date()));
     })().catch(() => {});
-  }, [ready, tasks, settings.remindersOn]);
+  }, [status, tasks, settings.remindersOn]);
+
+  const signIn = useCallback(async (email: string, password: string) => enter(await authApi.login(email, password, DEVICE)), [enter]);
+  const signUp = useCallback(
+    async (email: string, password: string, name: string) => enter(await authApi.register(email, password, name, DEVICE)),
+    [enter],
+  );
+  const signInWithGoogle = useCallback(
+    async (cfg: PublicConfig['google']) => {
+      const g = await googleSignIn(cfg);
+      if (!g) return false;
+      await enter(await authApi.google(g.idToken, g.serverAuthCode, DEVICE));
+      return true;
+    },
+    [enter],
+  );
+  const signOut = useCallback(async () => {
+    await authApi.logout();
+    await googleSignOut();
+    await leave();
+  }, [leave]);
+  const reloadUser = useCallback(async () => {
+    const u = await authApi.me();
+    userRef.current = u;
+    setUser(u);
+  }, []);
 
   const markDone = useCallback(
     async (id: number) => {
       setTasks((ts) => ts.filter((t) => t.id !== id)); // cập nhật lạc quan
       try {
-        await api.done(conn, id);
+        await api.done(id);
       } finally {
         refresh();
       }
     },
-    [conn, refresh],
+    [refresh],
   );
 
   const moveTask = useCallback(
     async (id: number, dueAt: string) => {
-      await api.patch(conn, id, { due_at: dueAt });
+      await api.patch(id, { due_at: dueAt });
       await refresh();
     },
-    [conn, refresh],
+    [refresh],
   );
 
-  const value: Store = {
-    ready,
-    settings,
-    conn,
-    updateSettings,
-    health,
-    now: new Date(Date.now() + nowOffset.current),
-    tasks,
-    loading,
-    error,
-    scheduled,
-    refresh,
-    markDone,
-    moveTask,
-  };
+  const value = useMemo<Store>(
+    () => ({
+      status,
+      user,
+      settings,
+      updateSettings,
+      health,
+      now: new Date(Date.now() + nowOffset.current),
+      tasks,
+      loading,
+      error,
+      scheduled,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signOut,
+      reloadUser,
+      refresh,
+      markDone,
+      moveTask,
+    }),
+    [status, user, settings, updateSettings, health, tasks, loading, error, scheduled, signIn, signUp, signInWithGoogle, signOut, reloadUser, refresh, markDone, moveTask],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

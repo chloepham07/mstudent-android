@@ -12,16 +12,16 @@ import { useStore } from '@/lib/store';
 
 export default function TasksScreen() {
   const c = usePalette();
-  const { tasks, now, loading, error, refresh, markDone, conn, health } = useStore();
+  const { tasks, now, loading, error, refresh, markDone, health } = useStore();
   const [digest, setDigest] = useState<string | null>(null);
   const [showDigest, setShowDigest] = useState(true);
 
   const loadDigest = useCallback(() => {
     api
-      .digest(conn)
+      .digest()
       .then((d) => setDigest(d.text))
       .catch(() => setDigest(null));
-  }, [conn]);
+  }, []);
 
   useEffect(() => {
     if (health) loadDigest();

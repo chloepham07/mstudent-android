@@ -69,3 +69,11 @@ test('planReminders giới hạn số thông báo (iOS tối đa 64) và chữ k
   assert.equal(plan[0].taskId, 1);
   assert.equal(signature(plan), signature(planReminders(many, NOW)));
 });
+
+test('normalizeUrl: thêm http:// cho địa chỉ LAN, giữ https, bỏ / cuối', async () => {
+  const { normalizeUrl } = await import('../url');
+  assert.equal(normalizeUrl(' 192.168.1.5:8000/ '), 'http://192.168.1.5:8000');
+  assert.equal(normalizeUrl('https://abc.trycloudflare.com//'), 'https://abc.trycloudflare.com');
+  assert.equal(normalizeUrl('HTTP://10.0.2.2:8000'), 'HTTP://10.0.2.2:8000');
+  assert.equal(normalizeUrl('   '), '');
+});

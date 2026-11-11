@@ -20,7 +20,7 @@ const SOURCES: { key: Source; label: string }[] = [
 
 export default function ShareScreen() {
   const c = usePalette();
-  const { conn, refresh, now } = useStore();
+  const { refresh, now } = useStore();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const shared = hasShareIntent ? [shareIntent.text, shareIntent.webUrl].filter(Boolean).join('\n') : '';
   const [text, setText] = useState(shared);
@@ -47,7 +47,7 @@ export default function ShareScreen() {
     setBusy(true);
     setErr(null);
     try {
-      setResult(await api.ingest(conn, text.trim(), source));
+      setResult(await api.ingest(text.trim(), source));
       refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -83,9 +83,9 @@ export default function ShareScreen() {
 
       {result && (
         <Card>
-          <Title>{result.relevant ? `✓ ${CATEGORY_LABEL[result.category]}` : '✗ Không cần làm gì'}</Title>
+          <Title>{result.duplicate ? '↺ Đã xử lý tin này rồi' : result.relevant ? `✓ ${CATEGORY_LABEL[result.category]}` : '✗ Không cần làm gì'}</Title>
           <Muted>
-            {result.reason} · chế độ {result.mode}
+            {result.reason} · {result.mode === 'llm' ? 'AI trực tiếp' : result.mode === 'cache' ? 'không chạy lại agent' : 'bộ luật (AI chưa bật)'}
           </Muted>
           {result.created.map((t) => (
             <TaskRow key={`c${t.id}`} task={t} now={now} />

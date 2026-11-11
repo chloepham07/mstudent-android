@@ -35,8 +35,9 @@ export interface IngestResult {
   reason: string;
   created: Task[];
   updated: Task[];
-  mode: 'llm' | 'offline';
+  mode: 'llm' | 'offline' | 'cache';
   trace: TraceStep[];
+  duplicate: boolean;
 }
 
 export interface ToolCall {
@@ -71,3 +72,61 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   admin: 'Thủ tục',
   other: 'Khác',
 };
+
+// ---- Tài khoản & tích hợp ----
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  is_admin: boolean;
+  has_password: boolean;
+  google_linked: boolean;
+  gmail_connected: boolean;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  user: User;
+}
+
+export interface PublicConfig {
+  registration_open: boolean;
+  google: { enabled: boolean; web_client_id: string; ios_client_id: string; gmail: boolean };
+}
+
+export interface Stats {
+  messages_read: number;
+  noise_filtered: number;
+  tasks_created: number;
+  tasks_done: number;
+  tasks_open: number;
+  changes_caught: number;
+  ai_runs: number;
+  by_source: Record<string, number>;
+}
+
+export interface AiCheck {
+  ok: boolean;
+  mode: 'llm' | 'offline';
+  model: string;
+  latency_ms?: number;
+  error?: string;
+}
+
+export interface GmailStatus {
+  connected: boolean;
+  email?: string;
+  last_sync_at?: string | null;
+}
+
+export interface GmailSyncResult {
+  scanned: number;
+  new: number;
+  tasks_created: number;
+  tasks_updated: number;
+  noise_filtered: number;
+  results: IngestResult[];
+}

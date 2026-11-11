@@ -36,7 +36,7 @@ const WELCOME: Msg = {
 
 export default function ChatScreen() {
   const c = usePalette();
-  const { conn, refresh, error } = useStore();
+  const { refresh, error, health } = useStore();
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -53,7 +53,7 @@ export default function ChatScreen() {
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: 'user', text: message }]);
     setBusy(true);
     try {
-      const r = await api.chat(conn, message, history);
+      const r = await api.chat(message, history);
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: 'assistant', text: r.reply, calls: r.tool_calls, mode: r.mode }]);
       if (r.tool_calls.some((t) => t.tool !== 'list_tasks')) refresh();
     } catch (e) {
@@ -71,6 +71,11 @@ export default function ChatScreen() {
       {error && (
         <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
           <ErrorBanner message={error} onRetry={refresh} />
+        </View>
+      )}
+      {!error && health?.mode === 'offline' && (
+        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+          <ErrorBanner message="Server đang chạy bằng bộ luật — AI chưa bật. Xem Cài đặt → AI" />
         </View>
       )}
       <FlatList

@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "vn.muoibuon.mstudent"
+      "package": "vn.muoibuon.mstudent",
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro",
@@ -55,7 +56,8 @@
           ],
           "iosShareExtensionName": "MStudent Share"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

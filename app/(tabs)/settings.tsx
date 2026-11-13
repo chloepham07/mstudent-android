@@ -7,6 +7,7 @@ import { Button, Card, Muted, Title } from '@/components/ui';
 import { usePalette } from '@/constants/theme';
 import { api, authApi } from '@/lib/api';
 import { fmtDue } from '@/lib/dates';
+import { gmailGrantErrorMessage } from '@/lib/errors';
 import { googleAvailable, googleGrantGmail } from '@/lib/google';
 import { scheduledCount, sendTest, supported as notifSupported } from '@/lib/notifications';
 import { useStore } from '@/lib/store';
@@ -51,7 +52,13 @@ export default function SettingsScreen() {
   const connectGmail = () =>
     run('gmail', async () => {
       if (!cfg) throw new Error('Chưa tải được cấu hình server');
-      const g = await googleGrantGmail(cfg.google);
+      let g;
+      try {
+        g = await googleGrantGmail(cfg.google);
+      } catch (e) {
+        // Google từ chối người chưa nằm trong danh sách test user → báo rõ thay vì mã lỗi khó hiểu.
+        throw new Error(gmailGrantErrorMessage(e));
+      }
       if (!g) return;
       if (!g.serverAuthCode) throw new Error('Google không trả mã uỷ quyền — kiểm tra webClientId và quyền Gmail');
       setGmail(await api.gmailConnect(g.serverAuthCode));

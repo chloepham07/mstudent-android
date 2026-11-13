@@ -77,3 +77,31 @@ test('normalizeUrl: thêm http:// cho địa chỉ LAN, giữ https, bỏ / cu�
   assert.equal(normalizeUrl('HTTP://10.0.2.2:8000'), 'HTTP://10.0.2.2:8000');
   assert.equal(normalizeUrl('   '), '');
 });
+
+test('normalizeUrl: chỉ cho http với địa chỉ mạng nội bộ, còn lại luôn https', async () => {
+  const { normalizeUrl, isPrivateHost } = await import('../url');
+  assert.equal(normalizeUrl('http://192.168.1.5:8000'), 'http://192.168.1.5:8000');
+  assert.equal(normalizeUrl('http://10.0.0.2'), 'http://10.0.0.2');
+  assert.equal(normalizeUrl('http://localhost:8000'), 'http://localhost:8000');
+  assert.equal(normalizeUrl('172.20.1.1:8000'), 'http://172.20.1.1:8000');
+  assert.equal(normalizeUrl('http://example.com'), 'https://example.com');
+  assert.equal(normalizeUrl('HTTP://mst.tail1234.ts.net/'), 'https://mst.tail1234.ts.net');
+  assert.equal(normalizeUrl('mst.tail1234.ts.net'), 'https://mst.tail1234.ts.net');
+  assert.equal(normalizeUrl('http://8.8.8.8:8000/api'), 'https://8.8.8.8:8000/api');
+  assert.equal(normalizeUrl('http://172.32.0.1'), 'https://172.32.0.1');
+  // host giả dạng địa chỉ nội bộ không được coi là nội bộ
+  assert.equal(normalizeUrl('http://192.168.1.5.evil.com'), 'https://192.168.1.5.evil.com');
+  assert.equal(normalizeUrl('http://localhost.evil.com'), 'https://localhost.evil.com');
+  assert.equal(isPrivateHost('192.168.0.1'), true);
+  assert.equal(isPrivateHost('192.169.0.1'), false);
+});
+
+test('gmailGrantErrorMessage: Google từ chối → câu báo thử nghiệm; lỗi khác giữ nguyên', async () => {
+  const { gmailGrantErrorMessage, GMAIL_TESTING_MESSAGE } = await import('../errors');
+  assert.equal(gmailGrantErrorMessage(new Error('access_denied: app is being tested')), GMAIL_TESTING_MESSAGE);
+  assert.equal(gmailGrantErrorMessage({ code: 'x', message: 'Access blocked: app has not completed the Google verification process' }), GMAIL_TESTING_MESSAGE);
+  // lỗi cấu hình của nhà phát triển phải giữ nguyên để còn sửa được
+  assert.equal(gmailGrantErrorMessage({ code: '10', message: 'DEVELOPER_ERROR' }), 'DEVELOPER_ERROR');
+  assert.equal(gmailGrantErrorMessage(new Error('Mất mạng')), 'Mất mạng');
+  assert.equal(gmailGrantErrorMessage(null), 'Không cấp được quyền Gmail');
+});

@@ -154,3 +154,36 @@ test('sources: thời gian tương đối giờ VN, trạng thái, nhãn nguồn
   assert.equal(taskSourcesLabel(['email', 'sheet', 'email'], 'email'), 'Email + Bảng lớp');
   assert.equal(taskSourcesLabel([], 'classroom'), 'Classroom');
 });
+
+test('sync: so ảnh chụp việc → việc mới / đổi hạn, lần đầu không báo', async () => {
+  const { diffTasks, snapshotOf, summaryOf } = await import('../sync');
+  const a = task(1, '2026-11-20T23:59:00+07:00');
+  const b = task(2, null);
+  const prev = snapshotOf([a, b, task(9, null, [], { status: 'done' })]);
+  assert.deepEqual(prev, { '1': '2026-11-20T23:59:00+07:00', '2': '' });
+  assert.deepEqual(diffTasks(null, [a]), { added: [], moved: [] });
+  const moved = { ...a, due_at: '2026-11-22T23:59:00+07:00' };
+  const c = task(3, '2026-11-21T17:00:00+07:00');
+  const d = diffTasks(prev, [moved, b, c, task(4, null, [], { status: 'done' })]);
+  assert.deepEqual(d.added.map((t) => t.id), [3]);
+  assert.deepEqual(d.moved.map((t) => t.id), [1]);
+  const fmt = (due: string | null) => (due ? due.slice(0, 10) : 'không có hạn');
+  assert.deepEqual(summaryOf(d.added, d.moved, fmt), { title: 'MStudent: việc mới', body: 'Việc 3 · 2026-11-21' });
+  assert.deepEqual(summaryOf([], d.moved, fmt)?.title, 'MStudent: cập nhật hạn');
+  assert.equal(summaryOf([], [], fmt), null);
+  assert.equal(summaryOf([c, a], [], fmt)?.body, 'Sớm nhất: Việc 1 · 2026-11-20');
+});
+
+test('zaloFilter: chỉ gói Zalo + nhóm đã chọn, chống lặp 10 phút, cắt độ dài', async () => {
+  const { ZaloFilter, ZALO_PACKAGE, MAX_CHARS } = await import('../zaloFilter');
+  const f = new ZaloFilter(['Lớp K70 CNTT', '  ']);
+  const base = { packageName: ZALO_PACKAGE, title: 'Lớp  K70 cntt', text: 'Mai kiểm tra 15 phút', postedAt: 0 };
+  assert.deepEqual(f.accept(base), { group: 'Lớp  K70 cntt', body: 'Mai kiểm tra 15 phút' });
+  assert.equal(f.accept({ ...base, postedAt: 60_000 }), null); // lặp trong 10 phút
+  assert.notEqual(f.accept({ ...base, postedAt: 11 * 60_000 }), null); // quá 10 phút → tin mới
+  assert.equal(f.accept({ ...base, title: 'Mẹ' }), null); // chat riêng / nhóm không chọn
+  assert.equal(f.accept({ ...base, packageName: 'com.facebook.orca' }), null);
+  assert.equal(f.accept({ ...base, text: '   ' }), null);
+  assert.equal(f.accept({ ...base, text: 'x'.repeat(MAX_CHARS + 10), postedAt: 99e6 })?.body.length, MAX_CHARS);
+  assert.equal(new ZaloFilter([]).accept(base), null); // chưa chọn nhóm → không gửi gì
+});

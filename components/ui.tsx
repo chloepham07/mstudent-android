@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, t
 
 import { usePalette } from '@/constants/theme';
 import { fmtDue, relativeDay } from '@/lib/dates';
+import { taskSourcesLabel } from '@/lib/sources';
 import { CATEGORY_LABEL, type Task } from '@/lib/types';
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -120,7 +121,9 @@ export function TaskRow({
             {task.location ? ` · ${task.location}` : ''}
             {task.updated_from.length ? ' · đã cập nhật' : ''}
           </Text>
+          <Text style={{ color: c.muted, fontSize: 12 }}>{taskSourcesLabel(task.sources ?? [], task.source)}</Text>
         </View>
+        {task.note ? <Text style={{ color: c.muted, fontSize: 12, fontStyle: 'italic' }}>{task.note}</Text> : null}
       </View>
       {onDone && (
         <Pressable

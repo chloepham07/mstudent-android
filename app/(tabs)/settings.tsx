@@ -1,5 +1,6 @@
 // Tab Cài đặt: tài khoản, kiểm tra AI, Gmail, thống kê, nhắc việc, dữ liệu demo.
 
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -111,6 +112,13 @@ export default function SettingsScreen() {
         )}
       </Card>
 
+      <Card>
+        <Title>Nguồn tự động</Title>
+        <Muted>Bảng deadline của lớp, lịch LMS, Gmail, Classroom: kết nối một lần, MStudent tự tạo việc kể cả khi bạn không mở app.</Muted>
+        <View style={{ marginTop: 8 }}>
+          <Button label="Quản lý nguồn tự động" onPress={() => router.push('/sources')} />
+        </View>
+      </Card>
       <Card>
         <Title>Gmail</Title>
         {gmail?.connected ? (

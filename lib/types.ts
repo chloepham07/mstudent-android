@@ -2,7 +2,7 @@
 
 export type Category = 'deadline' | 'exam' | 'class_change' | 'event' | 'admin' | 'other';
 export type Priority = 'high' | 'medium' | 'low';
-export type Source = 'email' | 'lms' | 'zalo' | 'manual';
+export type Source = 'email' | 'lms' | 'zalo' | 'manual' | 'classroom' | 'sheet';
 
 export interface Task {
   id: number;
@@ -18,6 +18,8 @@ export interface Task {
   status: string;
   reminders: string[];
   updated_from: string[];
+  sources: string[]; // các nguồn đã góp vào việc (gộp giữa email / Classroom / bảng lớp…)
+  note: string | null;
 }
 
 export interface TraceStep {
@@ -129,4 +131,20 @@ export interface GmailSyncResult {
   tasks_updated: number;
   noise_filtered: number;
   results: IngestResult[];
+}
+
+// ---------------- Nguồn tự động (002) ----------------
+
+export type SourceKind = 'gmail' | 'classroom' | 'ics' | 'sheet';
+
+export interface SourceConnection {
+  id: number;
+  kind: SourceKind;
+  label: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_ok_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  last: { created: number; updated: number; skipped: number; mode: string } | null;
 }

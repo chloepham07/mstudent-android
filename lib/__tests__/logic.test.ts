@@ -12,7 +12,7 @@ const NOW = new Date('2026-11-11T08:00:00+07:00'); // Thứ 4
 function task(id: number, due: string | null, reminders: string[] = [], extra: Partial<Task> = {}): Task {
   return {
     id, title: `Việc ${id}`, course: null, category: 'deadline', due_at: due, location: null, action: null,
-    priority: 'medium', source: 'zalo', message_id: `m${id}`, status: 'open', reminders, updated_from: [], ...extra,
+    priority: 'medium', source: 'zalo', message_id: `m${id}`, status: 'open', reminders, updated_from: [], sources: [], note: null, ...extra,
   };
 }
 
@@ -133,4 +133,24 @@ test('parseShareLink: deep link từ Phím tắt iOS chỉ điền sẵn nội d
   assert.equal(parseShareLink({}), null);
   assert.equal(parseShareLink({ text: 'x', source: 'evil' })?.source, 'zalo');
   assert.equal(parseShareLink({ text: 'y'.repeat(MAX_SHARED_CHARS + 50) })?.text.length, MAX_SHARED_CHARS);
+});
+
+test('sources: thời gian tương đối giờ VN, trạng thái, nhãn nguồn của việc', async () => {
+  const { relativeTime, statusOf, statusText, taskSourcesLabel } = await import('../sources');
+  const now = new Date('2026-11-13T10:00:00+07:00');
+  assert.equal(relativeTime('2026-11-13T09:59:30+07:00', now), 'vừa xong');
+  assert.equal(relativeTime('2026-11-13T09:55:00+07:00', now), '5 phút trước');
+  assert.equal(relativeTime('2026-11-13T07:00:00+07:00', now), '3 giờ trước');
+  assert.equal(relativeTime('2026-11-12T14:30:00Z', now), 'hôm qua 21:30');
+  assert.equal(relativeTime('2026-11-10T14:30:00Z', now), '10/11 21:30');
+  assert.equal(relativeTime(null, now), 'chưa có');
+  const base = { id: 1, kind: 'sheet' as const, label: 'K70', created_at: '', last_run_at: null, last: null };
+  assert.equal(statusOf({ ...base, enabled: true, last_error: null, last_ok_at: null }), 'pending');
+  assert.equal(statusOf({ ...base, enabled: false, last_error: 'Cần kết nối lại Google', last_ok_at: null }), 'error');
+  assert.equal(statusOf({ ...base, enabled: false, last_error: null, last_ok_at: null }), 'off');
+  const ok = { ...base, enabled: true, last_error: null, last_ok_at: '2026-11-13T02:55:00Z',
+    last: { created: 3, updated: 1, skipped: 0, mode: 'structured' } };
+  assert.equal(statusText(ok, now), 'Đồng bộ 5 phút trước · +3 việc, 1 cập nhật');
+  assert.equal(taskSourcesLabel(['email', 'sheet', 'email'], 'email'), 'Email + Bảng lớp');
+  assert.equal(taskSourcesLabel([], 'classroom'), 'Classroom');
 });

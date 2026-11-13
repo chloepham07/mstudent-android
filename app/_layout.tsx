@@ -63,6 +63,7 @@ function RootNav() {
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="share" options={{ presentation: 'modal', title: 'Thêm thông báo' }} />
+          <Stack.Screen name="sources" options={{ title: 'Nguồn tự động' }} />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" options={{ headerShown: false }} />

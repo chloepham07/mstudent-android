@@ -17,6 +17,7 @@ import type {
   IngestResult,
   PublicConfig,
   Source,
+  SourceConnection,
   Stats,
   Task,
   TokenResponse,
@@ -215,4 +216,12 @@ export const api = {
   gmailConnect: (serverAuthCode: string) => call<GmailStatus>('/api/google/connect', post({ server_auth_code: serverAuthCode })),
   gmailSync: (days = 7) => call<GmailSyncResult>('/api/google/gmail/sync', post({ days }), 180000),
   gmailDisconnect: () => call<GmailStatus>('/api/google/disconnect', { method: 'DELETE' }),
+  // Nguồn tự động (002)
+  sources: () => call<SourceConnection[]>('/api/sources'),
+  addSource: (kind: 'ics' | 'sheet', url: string, label = '') =>
+    call<SourceConnection>('/api/sources', post({ kind, url, label }), 45000),
+  setSourceEnabled: (id: number, enabled: boolean) =>
+    call<SourceConnection>(`/api/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  deleteSource: (id: number) => call<{ ok: boolean }>(`/api/sources/${id}`, { method: 'DELETE' }),
+  syncSourceNow: (id: number) => call<{ queued: boolean }>(`/api/sources/${id}/sync`, post()),
 };

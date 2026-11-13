@@ -121,3 +121,16 @@ test('gmailGrantErrorMessage: Google từ chối → câu báo thử nghiệm; l
   assert.equal(gmailGrantErrorMessage(new Error('Mất mạng')), 'Mất mạng');
   assert.equal(gmailGrantErrorMessage(null), 'Không cấp được quyền Gmail');
 });
+
+test('parseShareLink: deep link từ Phím tắt iOS chỉ điền sẵn nội dung hợp lệ', async () => {
+  const { parseShareLink, MAX_SHARED_CHARS } = await import('../sharelink');
+  assert.deepEqual(parseShareLink({ text: '  Nộp Lab 4 trước 23h59 thứ 6\r\n ', source: 'zalo' }), {
+    text: 'Nộp Lab 4 trước 23h59 thứ 6',
+    source: 'zalo',
+  });
+  assert.deepEqual(parseShareLink({ text: ['a', 'b'], source: 'EMAIL' }), { text: 'a', source: 'email' });
+  assert.equal(parseShareLink({ text: '   ' }), null);
+  assert.equal(parseShareLink({}), null);
+  assert.equal(parseShareLink({ text: 'x', source: 'evil' })?.source, 'zalo');
+  assert.equal(parseShareLink({ text: 'y'.repeat(MAX_SHARED_CHARS + 50) })?.text.length, MAX_SHARED_CHARS);
+});

@@ -1,6 +1,6 @@
 // Màn hình nhận nội dung chia sẻ từ Zalo/app khác (hoặc dán tay) → chạy pipeline agent → xem kết quả.
 
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,6 +8,7 @@ import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-n
 import { Button, Card, Chip, Muted, TaskRow, Title } from '@/components/ui';
 import { usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
+import { parseShareLink } from '@/lib/sharelink';
 import { useStore } from '@/lib/store';
 import { CATEGORY_LABEL, type IngestResult, type Source } from '@/lib/types';
 
@@ -22,9 +23,11 @@ export default function ShareScreen() {
   const c = usePalette();
   const { refresh, now } = useStore();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
-  const shared = hasShareIntent ? [shareIntent.text, shareIntent.webUrl].filter(Boolean).join('\n') : '';
+  // Nguồn 2: deep link mstudent://share?text=… từ Phím tắt iOS (bản không có share extension).
+  const link = parseShareLink(useLocalSearchParams<{ text?: string; source?: string }>());
+  const shared = hasShareIntent ? [shareIntent.text, shareIntent.webUrl].filter(Boolean).join('\n') : (link?.text ?? '');
   const [text, setText] = useState(shared);
-  const [source, setSource] = useState<Source>(hasShareIntent ? 'zalo' : 'manual');
+  const [source, setSource] = useState<Source>(hasShareIntent ? 'zalo' : (link?.source ?? 'manual'));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export default function ShareScreen() {
     // Nội dung chia sẻ mới đến khi màn hình đang mở → thay thế (pattern "derive state from props").
     setLastShared(shared);
     setText(shared);
-    setSource('zalo');
+    setSource(hasShareIntent ? 'zalo' : (link?.source ?? 'zalo'));
     setResult(null);
   }
 

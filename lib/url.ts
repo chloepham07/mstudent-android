@@ -8,14 +8,22 @@ export function isPrivateHost(host: string): boolean {
   return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
 }
 
-function hostOf(rest: string): string {
-  const authority = rest.split(/[/?#]/)[0];
-  if (authority.startsWith('[')) return authority.slice(0, authority.indexOf(']') + 1);
-  return authority.split(':')[0];
+/** Tách phần authority (host[:port]) và phần còn lại; BỎ "user:pass@" vì host thật nằm sau @. */
+function splitAuthority(rest: string): { hostPort: string; tail: string } {
+  // "\\" được fetch/URL coi như "/" nên cũng là ranh giới của authority.
+  const end = rest.search(/[/?#\\]/);
+  const authority = end < 0 ? rest : rest.slice(0, end);
+  const tail = end < 0 ? '' : rest.slice(end);
+  return { hostPort: authority.slice(authority.lastIndexOf('@') + 1), tail };
+}
+
+function hostOf(hostPort: string): string {
+  if (hostPort.startsWith('[')) return hostPort.slice(0, hostPort.indexOf(']') + 1);
+  return hostPort.split(':')[0];
 }
 
 /**
- * Chuẩn hoá địa chỉ server; bỏ dấu / cuối.
+ * Chuẩn hoá địa chỉ server; bỏ dấu / cuối và mọi thông tin đăng nhập trong URL (user:pass@).
  * - Địa chỉ mạng nội bộ: cho phép http (demo với backend chạy trên máy tính), mặc định http nếu thiếu scheme.
  * - Mọi địa chỉ khác: luôn là https — token không bao giờ đi qua HTTP thường trên Internet.
  */
@@ -23,7 +31,8 @@ export function normalizeUrl(input: string): string {
   const v = input.trim().replace(/\/+$/, '');
   if (!v) return '';
   const m = /^(https?):\/\/(.*)$/i.exec(v);
-  const rest = m ? m[2] : v;
-  if (isPrivateHost(hostOf(rest))) return m ? v : `http://${v}`;
-  return `https://${rest}`;
+  const { hostPort, tail } = splitAuthority(m ? m[2] : v);
+  const clean = hostPort + tail;
+  if (isPrivateHost(hostOf(hostPort))) return `${m ? m[1] : 'http'}://${clean}`;
+  return `https://${clean}`;
 }

@@ -96,6 +96,22 @@ test('normalizeUrl: chỉ cho http với địa chỉ mạng nội bộ, còn l�
   assert.equal(isPrivateHost('192.169.0.1'), false);
 });
 
+test('normalizeUrl: phần user@ không được dùng để lách http (host thật nằm sau @)', async () => {
+  const { normalizeUrl } = await import('../url');
+  assert.equal(normalizeUrl('http://localhost:x@evil.com/api'), 'https://evil.com/api');
+  assert.equal(normalizeUrl('http://10.0.0.1:1@203.0.113.9:8000'), 'https://203.0.113.9:8000');
+  assert.equal(normalizeUrl('http://[::1]@evil.com'), 'https://evil.com');
+  assert.equal(normalizeUrl('localhost:pw@evil.com'), 'https://evil.com');
+  assert.equal(normalizeUrl('http://user@192.168.1.5:8000'), 'http://192.168.1.5:8000');
+  // "\\" được trình duyệt/fetch coi như "/", nên host vẫn là localhost
+  assert.equal(normalizeUrl('http://localhost\\@evil.com'), 'http://localhost\\@evil.com');
+  for (const u of ['http://localhost:x@evil.com/api', 'localhost:pw@evil.com', 'http://[::1]@evil.com']) {
+    const out = new URL(normalizeUrl(u));
+    assert.equal(out.protocol, 'https:');
+    assert.equal(out.username + out.password, '');
+  }
+});
+
 test('gmailGrantErrorMessage: Google từ chối → câu báo thử nghiệm; lỗi khác giữ nguyên', async () => {
   const { gmailGrantErrorMessage, GMAIL_TESTING_MESSAGE } = await import('../errors');
   assert.equal(gmailGrantErrorMessage(new Error('access_denied: app is being tested')), GMAIL_TESTING_MESSAGE);

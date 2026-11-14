@@ -224,4 +224,8 @@ export const api = {
     call<SourceConnection>(`/api/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
   deleteSource: (id: number) => call<{ ok: boolean }>(`/api/sources/${id}`, { method: 'DELETE' }),
   syncSourceNow: (id: number) => call<{ queued: boolean }>(`/api/sources/${id}/sync`, post()),
+  pushRegister: (token: string, platform: 'ios' | 'android', notify: boolean) =>
+    call<{ ok: boolean }>('/api/push/register', post({ token, platform, notify })),
+  pushUnregister: (token: string, platform: 'ios' | 'android') =>
+    call<{ ok: boolean }>('/api/push/register', { method: 'DELETE', body: JSON.stringify({ token, platform, notify: false }) }),
 };

@@ -9,11 +9,13 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { Platform } from 'react-native';
 
 import { api, ApiError, authApi, onSessionExpired, setBaseUrl } from './api';
+import { registerBackgroundRefresh, saveSnapshot, SETTINGS_KEY } from './background';
 import { googleSignIn, googleSignOut } from './google';
 import { clearReminders, ensurePermission, syncReminders } from './notifications';
+import { registerPush, unregisterPush } from './push';
 import type { Health, PublicConfig, Task, User } from './types';
 
-const SETTINGS_KEY = 'mstudent.settings.v2';
+
 const USER_KEY = 'mstudent.user.v1';
 const tasksKey = (userId: number) => `mstudent.tasks.v1.${userId}`;
 
@@ -163,8 +165,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (await ensurePermission()) setScheduled(await syncReminders(tasks, new Date()));
+      await saveSnapshot(tasks); // mốc cho làm mới nền: chỉ báo việc mới hơn những gì đã thấy
     })().catch(() => {});
   }, [status, tasks, settings.remindersOn]);
+
+  // Thông báo khi app đóng: đăng ký push (nếu bản cài hỗ trợ) + làm mới nền; cờ notify theo cài đặt nhắc việc.
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    registerPush(settings.remindersOn).catch(() => {});
+    if (settings.remindersOn) registerBackgroundRefresh().catch(() => {});
+  }, [status, settings.remindersOn]);
 
   const signIn = useCallback(async (email: string, password: string) => enter(await authApi.login(email, password, DEVICE)), [enter]);
   const signUp = useCallback(
@@ -181,6 +191,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [enter],
   );
   const signOut = useCallback(async () => {
+    await unregisterPush();
     await authApi.logout();
     await googleSignOut();
     await leave();

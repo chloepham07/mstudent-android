@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-rout
 import { ShareIntentModule, ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
 import { Lexend_400Regular, Lexend_500Medium, Lexend_600SemiBold, Lexend_700Bold, useFonts } from '@expo-google-fonts/lexend';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
@@ -64,6 +65,14 @@ function RootNav() {
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
+
+  // Bấm thông báo "việc mới" (đẩy từ máy chủ hoặc làm mới nền) → mở tab Việc (FR-077).
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+      if ((r.notification.request.content.data as { type?: string } | undefined)?.type === 'tasks') router.navigate('/tasks');
+    });
+    return () => sub.remove();
+  }, []);
   if (!ready) return null;
 
   const signedIn = status === 'signedIn';

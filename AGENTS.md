@@ -43,5 +43,5 @@ lib/__tests__/  test node:test cho logic thuần
 6. Link mở từ dữ liệu máy chủ chỉ nhận http(s) (`lib/events.ts`); link Google Form điền sẵn dựng trên máy
    (`lib/prefill.ts`) và app không bao giờ tự gửi form.
 7. Chữ hiển thị tiếng Việt, hỗ trợ dark mode qua `usePalette()`; tên biến, hàm, commit tiếng Anh.
-8. Nhánh riêng cho mỗi việc, mỗi PR một việc, không push thẳng vào `main`. Báo cáo ngắn: làm gì, file nào, test ra sao,
+8. Nhánh riêng cho mỗi việc, mỗi PR một việc, tạo từ `dev`, PR vào `dev`; không push thẳng vào `master`. Báo cáo ngắn: làm gì, file nào, test ra sao,
    **chưa kiểm tra được gì** (Expo Go hay cần bản build).

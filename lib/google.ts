@@ -4,6 +4,12 @@
 import type { PublicConfig } from './types';
 
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+// Google Classroom chỉ đọc: lớp, bài tập + bài nộp của chính mình, thông báo lớp (002 US2).
+export const CLASSROOM_SCOPES = [
+  'https://www.googleapis.com/auth/classroom.courses.readonly',
+  'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
+  'https://www.googleapis.com/auth/classroom.announcements.readonly',
+];
 
 type Lib = typeof import('@react-native-google-signin/google-signin');
 
@@ -23,16 +29,17 @@ export interface GoogleResult {
   email: string;
 }
 
-async function run(cfg: PublicConfig['google'], withGmail: boolean): Promise<GoogleResult | null> {
+async function run(cfg: PublicConfig['google'], scopes: string[]): Promise<GoogleResult | null> {
+  const offline = scopes.length > 0;
   if (!lib) throw new Error('Bản app này chưa có Google Sign-In (cần development build)');
   if (!cfg.enabled) throw new Error('Server chưa cấu hình Google (GOOGLE_WEB_CLIENT_ID)');
   const { GoogleSignin } = lib;
   GoogleSignin.configure({
     webClientId: cfg.web_client_id, // server dùng client này để kiểm ID token và đổi mã uỷ quyền
     iosClientId: cfg.ios_client_id || undefined,
-    scopes: withGmail ? [GMAIL_SCOPE] : [],
-    offlineAccess: withGmail, // xin serverAuthCode để SERVER giữ refresh token, không phải app
-    forceCodeForRefreshToken: withGmail,
+    scopes,
+    offlineAccess: offline, // xin serverAuthCode để SERVER giữ refresh token, không phải app
+    forceCodeForRefreshToken: offline,
   });
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const res = await GoogleSignin.signIn();
@@ -43,10 +50,17 @@ async function run(cfg: PublicConfig['google'], withGmail: boolean): Promise<Goo
 }
 
 /** Đăng nhập: chỉ xin thông tin cơ bản (email, tên). */
-export const googleSignIn = (cfg: PublicConfig['google']) => run(cfg, false);
+export const googleSignIn = (cfg: PublicConfig['google']) => run(cfg, []);
 
 /** Cấp quyền đọc Gmail: trả về serverAuthCode để gửi cho backend. */
-export const googleGrantGmail = (cfg: PublicConfig['google']) => run(cfg, true);
+export const googleGrantGmail = (cfg: PublicConfig['google']) => run(cfg, [GMAIL_SCOPE]);
+
+/**
+ * Cấp quyền chỉ đọc cho các nguồn Google đã chọn. Máy chủ giữ MỘT refresh token cho mỗi tài khoản, nên khi thêm
+ * nguồn mới phải xin lại cả quyền của nguồn đã kết nối (nếu không, token mới sẽ mất quyền cũ).
+ */
+export const googleGrant = (cfg: PublicConfig['google'], want: { gmail: boolean; classroom: boolean }) =>
+  run(cfg, [...(want.gmail ? [GMAIL_SCOPE] : []), ...(want.classroom ? CLASSROOM_SCOPES : [])]);
 
 export async function googleSignOut() {
   try {

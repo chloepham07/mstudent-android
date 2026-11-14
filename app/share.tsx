@@ -30,10 +30,13 @@ export default function ShareScreen() {
   const { refresh, now } = useStore();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   // Nguồn 2: deep link mstudent://share?text=… từ Phím tắt iOS (bản không có share extension).
-  const link = parseShareLink(useLocalSearchParams<{ text?: string; source?: string }>());
+  const params = useLocalSearchParams<{ text?: string; source?: string }>();
+  const link = parseShareLink(params);
+  // Mở từ ô "Zalo" ở màn Nguồn tự động: chọn sẵn nguồn, chưa có nội dung.
+  const preset = SOURCES.find((s) => s.key === params.source)?.key ?? null;
   const shared = hasShareIntent ? [shareIntent.text, shareIntent.webUrl].filter(Boolean).join('\n') : (link?.text ?? '');
   const [text, setText] = useState(shared);
-  const [source, setSource] = useState<Source>(hasShareIntent ? 'zalo' : (link?.source ?? 'manual'));
+  const [source, setSource] = useState<Source>(hasShareIntent ? 'zalo' : (link?.source ?? preset ?? 'manual'));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [err, setErr] = useState<string | null>(null);

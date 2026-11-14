@@ -1,15 +1,17 @@
 // Màn hình Nguồn tự động (002, FR-070/071/078): kết nối một lần, sau đó máy chủ tự đồng bộ.
 
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import { Button, Card, Chip, Muted, Title } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Button, Card, Muted, T, Title } from '@/components/ui';
+import { BRAND, FONT, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
+import { gmailGrantErrorMessage } from '@/lib/errors';
+import { googleAvailable, googleGrant } from '@/lib/google';
 import { SOURCE_KIND_LABEL, statusOf, statusText } from '@/lib/sources';
 import { useStore } from '@/lib/store';
-import type { SourceConnection } from '@/lib/types';
+import type { PublicConfig, SourceConnection } from '@/lib/types';
 
 type AddKind = 'sheet' | 'ics';
 
@@ -31,6 +33,8 @@ export default function SourcesScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const pollUntil = useRef(0);
+  const [cfg, setCfg] = useState<PublicConfig | null>(null);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
 
   // Chỉ đặt state sau khi có kết quả (không setState đồng bộ trong effect).
   const load = useCallback(async () => {
@@ -57,6 +61,7 @@ export default function SourcesScreen() {
         setNow(new Date());
       })
       .catch((e: Error) => setNotice(e.message));
+    api.publicConfig().then(setCfg).catch(() => {});
   }, []);
 
   // Sau khi thêm / bấm đồng bộ: hỏi lại mỗi 5 giây trong 1 phút để hiện kết quả lượt đầu (FR-071).
@@ -118,9 +123,39 @@ export default function SourcesScreen() {
 
   const google = (items ?? []).filter((s) => s.kind === 'gmail' || s.kind === 'classroom');
   const links = (items ?? []).filter((s) => s.kind === 'sheet' || s.kind === 'ics');
+  const hasGmail = google.some((s) => s.kind === 'gmail');
+  const hasClassroom = google.some((s) => s.kind === 'classroom');
+  const googleReady = !!cfg?.google.enabled && googleAvailable;
+
+  // Gmail và Classroom dùng chung một lần cấp quyền Google (chỉ đọc); xin lại cả quyền của nguồn đã có.
+  const connectGoogle = (want: { gmail: boolean; classroom: boolean }) =>
+    run('google', async () => {
+      if (!cfg?.google.enabled) {
+        throw new Error('Máy chủ chưa bật đăng nhập Google. Quản trị viên cần cấu hình Google Cloud (docs/GOOGLE_CLOUD_SETUP.md).');
+      }
+      if (!googleAvailable) throw new Error('Bản app này chưa có Google Sign-In — cần bản build có cấu hình Google.');
+      let g;
+      try {
+        g = await googleGrant(cfg.google, want);
+      } catch (e) {
+        throw new Error(gmailGrantErrorMessage(e));
+      }
+      if (!g) return; // người dùng bấm huỷ
+      if (!g.serverAuthCode) throw new Error('Google không trả mã uỷ quyền — thử lại.');
+      await api.gmailConnect(g.serverAuthCode);
+      setNotice(want.classroom ? 'Đã cho phép đọc Classroom. Đang đồng bộ lần đầu…' : 'Đã kết nối Gmail. Đang đọc thư 7 ngày gần nhất…');
+      pollUntil.current = Date.now() + 60000;
+      await load();
+    });
+
+  const startAdd = (kind: AddKind) => {
+    setAdding(kind);
+    setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 150);
+  };
 
   return (
     <ScrollView
+      ref={scroll}
       contentContainerStyle={{ padding: 16, gap: 14 }}
       style={{ backgroundColor: c.bg }}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} />}>
@@ -134,16 +169,49 @@ export default function SourcesScreen() {
         </Card>
       ) : null}
 
+      <View style={{ gap: 10 }}>
+        <T v="label" color={c.muted}>
+          KẾT NỐI NGUỒN
+        </T>
+        <View style={styles.tiles}>
+          <SourceTile
+            title="Gmail"
+            sub={hasGmail ? 'Đã kết nối · thư mới tự thành việc' : googleReady ? 'Chỉ đọc · email trường, Teams, Udemy' : 'Máy chủ chưa bật Google'}
+            tone={BRAND.lime}
+            done={hasGmail}
+            busy={busy === 'google'}
+            onPress={() => connectGoogle({ gmail: true, classroom: hasClassroom })}
+          />
+          <SourceTile
+            title="Classroom"
+            sub={hasClassroom ? 'Đã cho phép · bài tập có hạn' : googleReady ? 'Bài tập, hạn nộp, thông báo lớp' : 'Máy chủ chưa bật Google'}
+            tone={BRAND.periwinkle}
+            done={hasClassroom}
+            busy={busy === 'google'}
+            onPress={() => connectGoogle({ gmail: hasGmail, classroom: true })}
+          />
+          <SourceTile title="Bảng lớp" sub="Link Google Sheets deadline chung" tone={BRAND.pink} onPress={() => startAdd('sheet')} />
+          <SourceTile title="Lịch LMS" sub="Link xuất lịch Moodle (.ics)" tone={BRAND.mint} onPress={() => startAdd('ics')} />
+          <SourceTile
+            title="Zalo"
+            sub={Platform.OS === 'ios' ? 'Dán tin, hoặc dùng Phím tắt' : 'Dán tin, hoặc Chia sẻ → MStudent'}
+            onPress={() => router.push({ pathname: '/share', params: { source: 'zalo' } })}
+          />
+          <SourceTile
+            title="Email trường"
+            sub="Chuyển tiếp Outlook → Gmail"
+            onPress={() => Linking.openURL('https://outlook.office.com/mail/options/mail/forwarding')}
+          />
+        </View>
+      </View>
+
       <Card>
         <Title>Tài khoản Google</Title>
         {google.length ? (
           google.map((s) => <SourceRow key={s.id} s={s} now={now} busy={busy} onSync={syncNow} onToggle={toggle} />)
         ) : (
-          <Muted>Chưa kết nối. Vào Cài đặt → Gmail để kết nối; email mới sẽ tự thành việc sau 1–3 phút.</Muted>
+          <Muted>Chưa kết nối. Bấm ô Gmail hoặc Classroom ở trên.</Muted>
         )}
-        <View style={{ marginTop: 8 }}>
-          <Button label="Mở Cài đặt Gmail" variant="ghost" small onPress={() => router.back()} />
-        </View>
       </Card>
 
       <Card>
@@ -160,10 +228,6 @@ export default function SourcesScreen() {
             onRemove={remove}
           />
         ))}
-        <View style={[styles.row, { marginTop: 10 }]}>
-          <Chip label="+ Bảng lớp" active={adding === 'sheet'} onPress={() => setAdding(adding === 'sheet' ? null : 'sheet')} />
-          <Chip label="+ Lịch LMS" active={adding === 'ics'} onPress={() => setAdding(adding === 'ics' ? null : 'ics')} />
-        </View>
         {adding && (
           <View style={{ gap: 8, marginTop: 10 }}>
             <Muted>{ADD_HELP[adding]}</Muted>
@@ -247,7 +311,47 @@ function SourceRow({
   );
 }
 
+/** Ô kết nối nguồn: màu theo UI Kit, chữ mực; đã kết nối thì có dấu ✓. */
+function SourceTile({
+  title,
+  sub,
+  tone,
+  done,
+  busy,
+  onPress,
+}: {
+  title: string;
+  sub: string;
+  tone?: string;
+  done?: boolean;
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const c = usePalette();
+  const bg = tone ?? c.soft;
+  const fg = tone ? BRAND.ink : c.text;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${sub}`}
+      accessibilityState={{ busy: !!busy, checked: !!done }}
+      style={({ pressed }) => [styles.tile, { backgroundColor: bg, opacity: pressed || busy ? 0.6 : 1 }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontFamily: FONT.semibold, fontSize: 16, color: fg }}>{title}</Text>
+        <Text style={{ fontFamily: FONT.bold, fontSize: 16, color: fg }}>{done ? '✓' : '+'}</Text>
+      </View>
+      <Text style={{ fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: tone ? BRAND.ink : c.muted }} numberOfLines={2}>
+        {sub}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tile: { flexBasis: '47%', flexGrow: 1, minHeight: 88, borderRadius: 20, padding: 14, gap: 6, justifyContent: 'space-between' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   item: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: 10, gap: 6 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },

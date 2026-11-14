@@ -1,4 +1,4 @@
-// Kiểu dữ liệu khớp với backend/app/models.py
+// Kiểu dữ liệu khớp với app/models.py của repo mstudent-backend
 
 export type Category = 'deadline' | 'exam' | 'class_change' | 'event' | 'admin' | 'other';
 export type Priority = 'high' | 'medium' | 'low';

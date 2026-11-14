@@ -1,5 +1,8 @@
 # MStudent — app iOS & Android (Expo SDK 58)
 
+> Repo này chỉ có **app**. Backend (FastAPI, agent AI), tài liệu chung và spec: https://github.com/muoibuon/mstudent-backend
+> Quy tắc cho người và coding agent: [`AGENTS.md`](AGENTS.md). Trước khi push: `npm test && npm run typecheck && npx expo lint`.
+> Làm việc nhóm: nhánh riêng cho mỗi việc, PR vào `main`; backend đổi API thì cập nhật `lib/types.ts` + `lib/api.ts`.
 App gọi backend FastAPI; mọi agent chạy trên server. App **không chứa** khoá LLM hay client secret.
 
 | Màn hình | Làm gì |
@@ -30,7 +33,7 @@ Biến môi trường khi build:
 | `GOOGLE_IOS_URL_SCHEME` | Bắt buộc cho Google Sign-In trên iOS: `com.googleusercontent.apps.<iOS client ID đảo ngược>` |
 | `MSTUDENT_HTTPS_ONLY=1` | Cấm HTTP thường. Mặc định cho phép HTTP **trong mạng nội bộ** để gọi backend localhost |
 
-Android cần đăng ký SHA-1 của khoá ký trong Google Cloud Console — xem `../docs/GOOGLE_CLOUD_SETUP.md`.
+Android cần đăng ký SHA-1 của khoá ký trong Google Cloud Console — xem [GOOGLE_CLOUD_SETUP.md](https://github.com/muoibuon/mstudent-backend/blob/main/docs/GOOGLE_CLOUD_SETUP.md) (repo backend).
 Không commit `ios/` và `android/` (sinh ra bởi `expo prebuild`). Bundle id / package: `vn.muoibuon.mstudent`.
 
 ## Kết nối tới backend chạy trên máy tính

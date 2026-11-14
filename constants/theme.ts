@@ -88,7 +88,7 @@ export const FONT = {
 
 /** Thang chữ: display 40/42 · h1 26/32 · title 17/22 · body 15/22 · label 12 IN HOA giãn 1. */
 export const TYPE = {
-  display: { fontFamily: FONT.display, fontSize: 40, lineHeight: 42 },
+  display: { fontFamily: FONT.display, fontSize: 40, lineHeight: 56 }, // cao hơn UI Kit (42) để không cắt dấu tiếng Việt
   h1: { fontFamily: FONT.bold, fontSize: 26, lineHeight: 32 },
   title: { fontFamily: FONT.semibold, fontSize: 17, lineHeight: 22 },
   body: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22 },

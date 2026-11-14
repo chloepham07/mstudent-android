@@ -32,7 +32,8 @@ export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: Varia
 /** Tiêu đề IN HOA Baloo 2 (màn chào, khối nổi bật). */
 export function Display({ children, size = 26, color, style }: { children: ReactNode; size?: number; color?: string; style?: StyleProp<TextStyle> }) {
   return (
-    <Text style={[{ fontFamily: FONT.display, fontSize: size, lineHeight: size * 1.05, color: color ?? BRAND.lime }, style]}>
+    // Dấu tiếng Việt trên chữ IN HOA (À, Ô, Ệ…) của Baloo 2 cao hơn hẳn chữ: dòng phải cao ~1.4× để không bị cắt.
+    <Text style={[{ fontFamily: FONT.display, fontSize: size, lineHeight: Math.round(size * 1.4), paddingTop: Math.round(size * 0.08), color: color ?? BRAND.lime }, style]}>
       {typeof children === 'string' ? children.toUpperCase() : children}
     </Text>
   );

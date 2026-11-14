@@ -105,7 +105,7 @@ export default function LoginScreen() {
             <View style={[styles.blob, { backgroundColor: BRAND.pink, right: 24, top: 70, width: 44, height: 44 }]} />
             <View style={[styles.blob, { backgroundColor: BRAND.periwinkle, left: 0, top: 110, width: 48, height: 48 }]} />
             <View style={styles.speech}>
-              <T style={{ fontFamily: FONT.display, fontSize: 22 }} color={BRAND.cobalt}>
+              <T style={{ fontFamily: FONT.display, fontSize: 22, lineHeight: 31 }} color={BRAND.cobalt}>
                 Bắt đầu nào!
               </T>
             </View>

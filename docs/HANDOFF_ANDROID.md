@@ -8,7 +8,7 @@
 - MStudent = AI inbox cho sinh viên: thông báo Gmail / LMS / Zalo → việc cần làm có hạn, ưu tiên, nhắc việc.
 - Thang điểm: **demo AI trên điện thoại thật 40đ** (app native, đóng hẳn mở lại vẫn vào thẳng, AI gọi LLM thật),
   vấn đề thật 35đ, mở rộng 25đ. Demo trên trình duyệt / giả lập / Expo Go = **0 điểm tiêu chí 1**.
-- Repo này chỉ có app. Backend, tài liệu chung và spec: https://github.com/muoibuon/mstudent-backend (nhánh `master`).
+- Repo này chỉ có app Android. Backend, tài liệu chung và spec: https://github.com/muoibuon/mstudent-backend (nhánh `master`).
 - **Backend production đã chạy**: `https://mstudent.tailec1929.ts.net` (Azure Japan East, Tailscale Funnel, HTTPS
   hợp lệ, chế độ `llm`: lọc bằng gemini-decision-1 khi có `GEMINI_API_KEY`, trả lời bằng gpt-6-luna). Kiểm tra: `curl https://mstudent.tailec1929.ts.net/api/health` → `"mode":"llm"`.
 - iPhone do người khác build bằng Xcode. **Việc của bạn: Android.**
@@ -25,8 +25,8 @@
 ## 3. Chuẩn bị (một lần)
 
 ```bash
-git clone https://github.com/muoibuon/mstudent-app.git
-cd mstudent-app
+git clone https://github.com/muoibuon/mstudent-android.git
+cd mstudent-android
 npm install
 npm test && npm run typecheck && npx expo lint   # phải xanh trước khi build
 ```

@@ -9,9 +9,6 @@
       "android": {
         "buildType": "apk"
       },
-      "ios": {
-        "simulator": false
-      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://mstudent.tailec1929.ts.net"
       }

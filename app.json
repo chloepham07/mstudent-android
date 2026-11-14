@@ -3,14 +3,13 @@
     "name": "MStudent",
     "slug": "mstudent",
     "version": "1.0.0",
+    "platforms": [
+      "android"
+    ],
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mstudent",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "vn.muoibuon.mstudent"
-    },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -21,11 +20,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "vn.muoibuon.mstudent",
       "allowBackup": false
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "single",
-      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",

@@ -12,6 +12,7 @@ import { Button, Chip, Display, ModePill, Muted, T, TaskCard } from '@/component
 import { BRAND, FONT, SCREEN_PAD, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
 import { parseShareLink } from '@/lib/sharelink';
+import { stackOverlap } from '@/lib/stack';
 import { useStore } from '@/lib/store';
 import { type IngestResult, type Source } from '@/lib/types';
 
@@ -127,7 +128,7 @@ export default function ShareScreen() {
               <ModePill live={result.mode === 'llm'} label={result.mode === 'cache' ? 'Không chạy lại agent' : undefined} />
             </View>
             {tasks.map((t, i) => (
-              <TaskCard key={`${t.id}-${i}`} task={t} now={now} overlap={i > 0} />
+              <TaskCard key={`${t.id}-${i}`} task={t} now={now} overlap={stackOverlap(tasks[i - 1], t)} spaced={i > 0} />
             ))}
             {!tasks.length && <Muted>{result.reason}</Muted>}
             {result.updated.length > 0 && <Muted>Đã cập nhật việc có sẵn thay vì tạo trùng.</Muted>}

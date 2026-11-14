@@ -1,10 +1,14 @@
-// Tab Lịch: dải 7 ngày, chọn ngày để xem việc; nhấn giữ một việc để dời hạn.
+// Tab Lịch (UI Kit, artboard "4 · Lịch"): dải 7 ngày (có việc = vàng chanh, đang chọn = đen), việc của ngày
+// đang chọn dạng thẻ màu xếp chồng; nhấn giữ một việc để dời sang ngày khác.
 
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, Muted, TaskRow } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Icon } from '@/components/Icon';
+import { CategoryCharacter } from '@/components/Mascot';
+import { Button, Muted, T, TaskCard } from '@/components/ui';
+import { BRAND, FONT, SCREEN_PAD, TAB_BAR_SPACE, usePalette } from '@/constants/theme';
 import { addDays, dayKey, fmtDayLong, fmtDayShort, fmtTime, moveToDay, startOfDay } from '@/lib/dates';
 import { useStore } from '@/lib/store';
 import type { Task } from '@/lib/types';
@@ -13,6 +17,7 @@ const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
 export default function CalendarScreen() {
   const c = usePalette();
+  const insets = useSafeAreaInsets();
   const { tasks, now, markDone, moveTask } = useStore();
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(() => dayKey(now));
@@ -35,48 +40,67 @@ export default function CalendarScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <View style={[styles.weekBar, { backgroundColor: c.panel, borderColor: c.line }]}>
-        <View style={styles.weekNav}>
-          <Button small variant="ghost" label="←" onPress={() => shiftWeek(-1)} />
-          <Text style={{ color: c.text, fontWeight: '600' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top + 12 }}>
+      <View style={styles.header}>
+        <T v="h1" accessibilityRole="header">
+          Lịch
+        </T>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <RoundButton label="Tuần trước" icon="left" onPress={() => shiftWeek(-1)} />
+          <T style={{ fontFamily: FONT.semibold, fontSize: 14 }}>
             {fmtDayShort(days[0])} – {fmtDayShort(days[6])}
-          </Text>
-          <Button small variant="ghost" label="→" onPress={() => shiftWeek(1)} />
-        </View>
-        <View style={styles.strip}>
-          {days.map((d) => {
-            const k = dayKey(d);
-            const n = byDay.get(k)?.length ?? 0;
-            const hasHigh = byDay.get(k)?.some((t) => t.priority === 'high');
-            const sel = k === selected;
-            return (
-              <Pressable
-                key={k}
-                onPress={() => setSelected(k)}
-                accessibilityRole="button"
-                accessibilityLabel={`${fmtDayLong(d)}, ${n} việc`}
-                style={[styles.day, sel && { backgroundColor: c.accent }, !sel && k === todayKey && { borderColor: c.accent, borderWidth: 1 }]}>
-                <Text style={{ color: sel ? c.onAccent : c.muted, fontSize: 12 }}>{DOW[new Date(d.getTime() + 7 * 3600e3).getUTCDay()]}</Text>
-                <Text style={{ color: sel ? c.onAccent : c.text, fontSize: 17, fontWeight: '600' }}>{k.slice(8)}</Text>
-                <View style={[styles.badge, { backgroundColor: n ? (hasHigh ? c.high : sel ? c.onAccent : c.accent) : 'transparent' }]} />
-              </Pressable>
-            );
-          })}
+          </T>
+          <RoundButton label="Tuần sau" icon="right" onPress={() => shiftWeek(1)} />
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 12, gap: 10 }}>
-        <Text style={{ color: c.text, fontSize: 17, fontWeight: '600' }}>{fmtDayLong(selected + 'T12:00:00+07:00')}</Text>
+      <View style={styles.strip}>
+        {days.map((d) => {
+          const k = dayKey(d);
+          const n = byDay.get(k)?.length ?? 0;
+          const sel = k === selected;
+          const bg = sel ? c.active : n ? BRAND.lime : c.soft;
+          const fg = sel ? (c.active === BRAND.ink ? '#FFFFFF' : BRAND.ink) : n ? BRAND.ink : c.muted;
+          return (
+            <Pressable
+              key={k}
+              onPress={() => setSelected(k)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sel }}
+              accessibilityLabel={`${fmtDayLong(d)}, ${n} việc`}
+              style={[styles.day, { backgroundColor: bg }]}>
+              <T style={{ fontFamily: FONT.bold, fontSize: 17 }} color={fg}>
+                {k.slice(8)}
+              </T>
+              <T style={{ fontSize: 12, fontFamily: k === todayKey ? FONT.semibold : FONT.regular }} color={fg}>
+                {DOW[new Date(d.getTime() + 7 * 3600e3).getUTCDay()]}
+              </T>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingHorizontal: SCREEN_PAD, paddingTop: 16, paddingBottom: TAB_BAR_SPACE + insets.bottom }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+          <T style={{ fontFamily: FONT.semibold, fontSize: 18, textTransform: 'capitalize' }}>
+            {fmtDayLong(selected + 'T12:00:00+07:00')}
+            {selected === todayKey ? ' · Hôm nay' : ''}
+          </T>
+          {!!dayTasks.length && <Muted>{dayTasks.length} việc</Muted>}
+        </View>
         {dayTasks.length ? (
-          <Card>
-            {dayTasks.map((t) => (
-              <TaskRow key={t.id} task={t} now={now} onDone={() => markDone(t.id)} onLongPress={() => setMoving(t)} />
+          <>
+            {dayTasks.map((t, i) => (
+              <TaskCard key={t.id} task={t} now={now} overlap={i > 0} onDone={() => markDone(t.id)} onLongPress={() => setMoving(t)} />
             ))}
-            <Muted style={{ marginTop: 8 }}>Nhấn giữ một việc để dời sang ngày khác.</Muted>
-          </Card>
+            <Muted style={{ marginTop: 12 }}>Nhấn giữ một việc để dời sang ngày khác.</Muted>
+          </>
         ) : (
-          <Muted>Không có việc nào trong ngày này.</Muted>
+          <View style={{ borderRadius: 28, backgroundColor: c.soft, paddingVertical: 28, paddingHorizontal: 20, alignItems: 'center', gap: 8 }}>
+            <CategoryCharacter category="event" size={80} />
+            <T style={{ fontFamily: FONT.semibold }}>Ngày này rảnh rồi!</T>
+            <Muted>Không có việc nào trong ngày này.</Muted>
+          </View>
         )}
       </ScrollView>
 
@@ -97,6 +121,15 @@ export default function CalendarScreen() {
   );
 }
 
+function RoundButton({ label, icon, onPress }: { label: string; icon: 'left' | 'right'; onPress: () => void }) {
+  const c = usePalette();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.round, { backgroundColor: c.soft }]}>
+      <Icon name={icon} color={c.text} size={20} stroke={2.4} />
+    </Pressable>
+  );
+}
+
 function MoveSheet({
   task,
   from,
@@ -112,41 +145,43 @@ function MoveSheet({
   const options = [...Array(14)].map((_, i) => addDays(from, i));
   return (
     <Modal visible={!!task} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: c.panel }]}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: '600' }} numberOfLines={2}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Đóng" />
+      <View style={[styles.sheet, { backgroundColor: c.surface }]}>
+        <T v="title" numberOfLines={2}>
           Dời “{task?.title}”
-        </Text>
-        <Muted style={{ marginBottom: 10 }}>Giữ nguyên giờ {task?.due_at ? fmtTime(task.due_at) : ''}</Muted>
+        </T>
+        <Muted style={{ marginBottom: 12 }}>Giữ nguyên giờ {task?.due_at ? fmtTime(task.due_at) : ''}</Muted>
         <View style={styles.grid}>
           {options.map((d) => {
             const k = dayKey(d);
-            const current = task?.due_at && dayKey(task.due_at) === k;
+            const current = !!task?.due_at && dayKey(task.due_at) === k;
             return (
               <Pressable
                 key={k}
                 onPress={() => onPick(k)}
-                disabled={!!current}
-                style={[styles.opt, { borderColor: c.line, backgroundColor: current ? c.soft : c.bg }]}>
-                <Text style={{ color: current ? c.muted : c.text }}>{fmtDayShort(d)}</Text>
+                disabled={current}
+                accessibilityRole="button"
+                style={[styles.opt, { backgroundColor: current ? c.active : c.soft }]}>
+                <T style={{ fontSize: 14 }} color={current ? c.onActive : c.text}>
+                  {fmtDayShort(d)}
+                </T>
               </Pressable>
             );
           })}
         </View>
-        <Button variant="ghost" label="Huỷ" onPress={onClose} />
+        <Button variant="outline" label="Huỷ" onPress={onClose} />
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  weekBar: { paddingHorizontal: 8, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  weekNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
-  strip: { flexDirection: 'row', justifyContent: 'space-between' },
-  day: { flex: 1, marginHorizontal: 2, alignItems: 'center', paddingVertical: 6, borderRadius: 12, gap: 2 },
-  badge: { width: 6, height: 6, borderRadius: 3 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: { padding: 16, paddingBottom: 32, borderTopLeftRadius: 18, borderTopRightRadius: 18, gap: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  opt: { borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, minWidth: '22%', alignItems: 'center' },
+  header: { paddingHorizontal: SCREEN_PAD, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  strip: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, marginTop: 16 },
+  day: { flex: 1, height: 68, borderRadius: 18, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  round: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(20,20,20,0.4)' },
+  sheet: { padding: 20, paddingBottom: 36, borderTopLeftRadius: 36, borderTopRightRadius: 36, gap: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  opt: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 10, minWidth: '22%', alignItems: 'center' },
 });

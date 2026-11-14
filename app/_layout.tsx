@@ -1,11 +1,13 @@
 import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import { ShareIntentModule, ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
+import { Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
+import { Lexend_400Regular, Lexend_500Medium, Lexend_600SemiBold, Lexend_700Bold, useFonts } from '@expo-google-fonts/lexend';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { PALETTES } from '@/constants/theme';
+import { FONT, PALETTES } from '@/constants/theme';
 import { configureNotifications } from '@/lib/notifications';
 import { StoreProvider, useStore } from '@/lib/store';
 
@@ -42,18 +44,27 @@ function ShareRedirect() {
 function RootNav() {
   const scheme = useColorScheme();
   const { status } = useStore();
+  // Font của UI Kit: Lexend (mọi chữ) + Baloo 2 ExtraBold (tiêu đề IN HOA). Lỗi tải font → vẫn chạy bằng font hệ thống.
+  const [fontsLoaded, fontError] = useFonts({
+    Lexend_400Regular,
+    Lexend_500Medium,
+    Lexend_600SemiBold,
+    Lexend_700Bold,
+    Baloo2_800ExtraBold,
+  });
+  const ready = status !== 'loading' && (fontsLoaded || !!fontError);
   const c = PALETTES[scheme];
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const theme = {
     ...base,
-    colors: { ...base.colors, primary: c.accent, background: c.bg, card: c.panel, text: c.text, border: c.line },
+    colors: { ...base.colors, primary: c.accent, background: c.bg, card: c.bg, text: c.text, border: c.bg },
   };
 
   // Giữ splash cho tới khi biết đã đăng nhập hay chưa → không nháy màn hình đăng nhập khi mở lại app.
   useEffect(() => {
-    if (status !== 'loading') SplashScreen.hideAsync().catch(() => {});
-  }, [status]);
-  if (status === 'loading') return null;
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+  if (!ready) return null;
 
   const signedIn = status === 'signedIn';
   return (
@@ -62,8 +73,16 @@ function RootNav() {
       <Stack>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="share" options={{ presentation: 'modal', title: 'Thêm thông báo' }} />
-          <Stack.Screen name="sources" options={{ title: 'Nguồn tự động' }} />
+          <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen
+            name="sources"
+            options={{
+              title: 'Nguồn tự động',
+              headerShadowVisible: false,
+              headerTitleStyle: { fontFamily: FONT.semibold, fontSize: 17 },
+              headerBackTitle: 'Cài đặt',
+            }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" options={{ headerShown: false }} />

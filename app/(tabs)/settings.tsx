@@ -2,10 +2,11 @@
 
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, Muted, Title } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Button, Card, Display, Muted, T } from '@/components/ui';
+import { BRAND, FONT, SCREEN_PAD, TAB_BAR_SPACE, usePalette } from '@/constants/theme';
 import { api, authApi } from '@/lib/api';
 import { fmtDue } from '@/lib/dates';
 import { gmailGrantErrorMessage } from '@/lib/errors';
@@ -16,6 +17,7 @@ import type { AiCheck, GmailStatus, PublicConfig, Stats } from '@/lib/types';
 
 export default function SettingsScreen() {
   const c = usePalette();
+  const insets = useSafeAreaInsets();
   const { user, settings, updateSettings, health, error, refresh, scheduled, signOut, reloadUser, tasks } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<number | null>(null);
@@ -78,137 +80,191 @@ export default function SettingsScreen() {
     });
 
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
-      <Card>
-        <Title>Tài khoản</Title>
-        <Text style={{ color: c.text, fontSize: 16 }}>{user?.name || user?.email}</Text>
-        <Muted>
-          {user?.email}
-          {user?.is_admin ? ' · quản trị viên' : ''}
-          {user?.google_linked ? ' · Google' : ''}
-        </Muted>
-        <View style={{ marginTop: 10 }}>
-          <Button variant="ghost" label="Đăng xuất" busy={busy === 'out'} onPress={() => run('out', signOut)} />
+    <ScrollView
+      style={{ backgroundColor: c.bg }}
+      contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE + insets.bottom + 8 }}
+      keyboardShouldPersistTaps="handled">
+      <View style={[styles.hero, { paddingTop: insets.top + 16 }]}>
+        <Display size={32}>Cài đặt</Display>
+        <View style={[styles.account, { backgroundColor: BRAND.pink }]} accessibilityLabel="Tài khoản">
+          <T v="title" color={BRAND.ink}>
+            {user?.name || user?.email}
+          </T>
+          <T v="small" color={BRAND.ink}>
+            {user?.email}
+            {user?.google_linked ? ' · đăng nhập bằng Google' : ' · đăng nhập bằng mật khẩu'}
+            {user?.is_admin ? ' · quản trị viên' : ''}
+          </T>
+          <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+            <Button small variant="dark" label="Đăng xuất" busy={busy === 'out'} onPress={() => run('out', signOut)} />
+          </View>
         </View>
-      </Card>
+      </View>
 
-      <Card>
-        <Title>AI</Title>
-        {health ? (
-          <Text style={{ color: health.mode === 'llm' ? c.ok : c.medium }}>
-            {health.mode === 'llm' ? `🟢 AI chạy trực tiếp · ${health.model}` : '🟡 Server đang dùng bộ luật — chưa bật AI'}
-          </Text>
-        ) : (
-          <Text style={{ color: c.bad }}>✗ {error ?? 'Chưa kết nối server'}</Text>
-        )}
-        <Muted style={{ marginTop: 4 }}>Server: {settings.baseUrl}</Muted>
-        <View style={{ marginTop: 10 }}>
-          <Button variant="ghost" label="Kiểm tra AI ngay (gọi thật 1 lượt)" busy={busy === 'ai'} onPress={() => run('ai', async () => setAi(await api.aiCheck()))} />
-        </View>
-        {ai && (
-          <Text style={{ color: ai.ok ? c.ok : c.bad, marginTop: 8 }}>
-            {ai.ok ? `✓ AI trả lời sau ${ai.latency_ms} ms (${ai.model})` : `✗ ${ai.error ?? 'AI trả kết quả không đúng'}`}
-          </Text>
-        )}
-      </Card>
-
-      <Card>
-        <Title>Nguồn tự động</Title>
-        <Muted>Bảng deadline của lớp, lịch LMS, Gmail, Classroom: kết nối một lần, MStudent tự tạo việc kể cả khi bạn không mở app.</Muted>
-        <View style={{ marginTop: 8 }}>
-          <Button label="Quản lý nguồn tự động" onPress={() => router.push('/sources')} />
-        </View>
-      </Card>
-      <Card>
-        <Title>Gmail</Title>
-        {gmail?.connected ? (
-          <>
-            <Text style={{ color: c.ok }}>✓ {gmail.email}</Text>
-            <Muted>Chỉ đọc. Lần quét gần nhất: {gmail.last_sync_at ? fmtDue(gmail.last_sync_at) : 'chưa quét'}</Muted>
-            <View style={styles.rowButtons}>
-              <View style={{ flex: 1 }}>
-                <Button label="Quét Gmail" busy={busy === 'sync'} onPress={syncGmail} />
-              </View>
-              <Button variant="ghost" label="Ngắt" busy={busy === 'gdis'} onPress={() => run('gdis', async () => { setGmail(await api.gmailDisconnect()); setGmailMsg(null); await reloadUser(); })} />
+      <View style={{ paddingHorizontal: SCREEN_PAD, gap: 14, marginTop: 16 }}>
+        <Card tone={BRAND.mint}>
+          <Display size={22} color={BRAND.mintInk}>
+            AI
+          </Display>
+          {health ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: health.mode === 'llm' ? '#1A9E6A' : BRAND.amberInk }} />
+              <T style={{ fontFamily: FONT.semibold }} color={BRAND.mintInkDeep}>
+                {health.mode === 'llm' ? `Trực tiếp · ${health.model}` : 'Bộ luật (offline) — AI chưa bật'}
+              </T>
             </View>
-          </>
-        ) : !cfg?.google.gmail ? (
-          <Muted>Server chưa cấu hình Google Cloud (GOOGLE_WEB_CLIENT_ID, GOOGLE_CLIENT_SECRET).</Muted>
-        ) : !googleAvailable ? (
-          <Muted>Bản app này chưa có Google Sign-In (Expo Go/web). Hãy dùng development build.</Muted>
-        ) : (
-          <>
-            <Muted style={{ marginBottom: 10 }}>
-              Cho MStudent quyền CHỈ ĐỌC hộp thư để AI tự tìm hạn nộp, lịch thi trong email của trường. Mã truy cập được mã hoá và chỉ lưu trên server.
-            </Muted>
-            <Button label="Kết nối Gmail" busy={busy === 'gmail'} onPress={connectGmail} />
-          </>
-        )}
-        {gmailMsg && <Text style={{ color: c.text, marginTop: 8 }}>{gmailMsg}</Text>}
-      </Card>
+          ) : (
+            <T color={BRAND.mintInkDeep}>{error ?? 'Chưa kết nối máy chủ'}</T>
+          )}
+          <T v="small" color={BRAND.mintInk} style={{ marginTop: 4 }}>
+            Máy chủ: {settings.baseUrl.replace(/^https?:\/\//, '')}
+          </T>
+          <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
+            <Button small variant="dark" label="Kiểm tra AI ngay" busy={busy === 'ai'} onPress={() => run('ai', async () => setAi(await api.aiCheck()))} />
+          </View>
+          {ai && (
+            <T v="small" color={ai.ok ? BRAND.mintInkDeep : c.bad} style={{ marginTop: 8 }}>
+              {ai.ok ? `AI trả lời sau ${ai.latency_ms} ms (${ai.model})` : (ai.error ?? 'AI trả kết quả không đúng')}
+            </T>
+          )}
+        </Card>
 
-      {stats && (
+        {stats && (
+          <View style={{ gap: 8 }}>
+            <T v="label" color={c.muted}>
+              MSTUDENT ĐÃ GIÚP BẠN
+            </T>
+            <View style={styles.statGrid}>
+              <Stat value={stats.messages_read} label="thông báo đã đọc" tone={BRAND.lime} />
+              <Stat value={stats.noise_filtered} label="tin nhiễu đã lọc" tone={BRAND.pink} />
+              <Stat value={stats.tasks_created} label="việc tìm được" tone={BRAND.periwinkle} />
+              <Stat value={stats.changes_caught} label="lần đổi hạn bắt kịp" tone={BRAND.mint} />
+              <Stat value={stats.tasks_done} label="việc đã xong" />
+              <Stat value={stats.ai_runs} label="lượt AI chạy" />
+            </View>
+          </View>
+        )}
+
         <Card>
-          <Title>MStudent đã giúp bạn</Title>
-          <View style={styles.statGrid}>
-            <Stat value={stats.messages_read} label="thông báo đã đọc" />
-            <Stat value={stats.noise_filtered} label="tin nhiễu đã lọc" />
-            <Stat value={stats.tasks_created} label="việc tìm được" />
-            <Stat value={stats.changes_caught} label="lần đổi hạn bắt kịp" />
-            <Stat value={stats.tasks_done} label="việc đã xong" />
-            <Stat value={stats.ai_runs} label="lượt AI chạy" />
+          <T v="title">Nguồn tự động</T>
+          <Muted style={{ marginTop: 4 }}>
+            Bảng deadline của lớp, lịch LMS, Gmail, Classroom: kết nối một lần, MStudent tự tạo việc kể cả khi bạn không mở app.
+          </Muted>
+          <View style={{ marginTop: 12 }}>
+            <Button label="Quản lý nguồn tự động" onPress={() => router.push('/sources')} />
           </View>
         </Card>
-      )}
 
-      <Card>
-        <Title>Nhắc việc trên máy</Title>
-        {notifSupported ? (
-          <>
-            <View style={styles.switchRow}>
-              <Text style={{ color: c.text, flex: 1 }}>Nhắc trước hạn (3 ngày, 1 ngày, 2 giờ, đúng giờ)</Text>
-              <Switch value={settings.remindersOn} onValueChange={(v) => updateSettings({ remindersOn: v })} />
-            </View>
-            <Muted>Đang hẹn {pending ?? scheduled} thông báo. Không cần mạng khi đến giờ nhắc.</Muted>
-            <View style={{ marginTop: 10 }}>
-              <Button
-                variant="ghost"
-                label="Gửi thông báo thử sau 5 giây"
-                onPress={async () => {
-                  if (!(await sendTest(5))) Alert.alert('Chưa có quyền', 'Hãy cho phép MStudent gửi thông báo trong Cài đặt của máy.');
-                }}
-              />
-            </View>
-          </>
-        ) : (
-          <Muted>Bản web không hỗ trợ nhắc việc. Hãy dùng app trên iOS/Android.</Muted>
-        )}
-      </Card>
+        <Card>
+          <T v="title">Gmail</T>
+          {gmail?.connected ? (
+            <>
+              <T v="small" color={c.ok} style={{ marginTop: 4 }}>
+                Đã kết nối · {gmail.email}
+              </T>
+              <Muted>Chỉ đọc. Lần quét gần nhất: {gmail.last_sync_at ? fmtDue(gmail.last_sync_at) : 'chưa quét'}</Muted>
+              <View style={styles.rowButtons}>
+                <View style={{ flex: 1 }}>
+                  <Button small label="Quét Gmail" busy={busy === 'sync'} onPress={syncGmail} />
+                </View>
+                <Button
+                  small
+                  variant="outline"
+                  label="Ngắt"
+                  busy={busy === 'gdis'}
+                  onPress={() =>
+                    run('gdis', async () => {
+                      setGmail(await api.gmailDisconnect());
+                      setGmailMsg(null);
+                      await reloadUser();
+                    })
+                  }
+                />
+              </View>
+            </>
+          ) : !cfg?.google.gmail ? (
+            <Muted style={{ marginTop: 4 }}>Máy chủ chưa cấu hình Google Cloud (GOOGLE_WEB_CLIENT_ID, GOOGLE_CLIENT_SECRET).</Muted>
+          ) : !googleAvailable ? (
+            <Muted style={{ marginTop: 4 }}>Bản app này chưa có Google Sign-In (Expo Go/web). Hãy dùng bản build.</Muted>
+          ) : (
+            <>
+              <Muted style={{ marginTop: 4, marginBottom: 12 }}>
+                Cho MStudent quyền CHỈ ĐỌC hộp thư để AI tự tìm hạn nộp, lịch thi trong email của trường. Mã truy cập được mã hoá và chỉ lưu trên máy chủ.
+              </Muted>
+              <Button label="Kết nối Gmail" busy={busy === 'gmail'} onPress={connectGmail} />
+            </>
+          )}
+          {gmailMsg && <T v="small" style={{ marginTop: 8 }}>{gmailMsg}</T>}
+        </Card>
 
-      <Card>
-        <Title>Dữ liệu demo</Title>
-        <Muted style={{ marginBottom: 10 }}>Xoá dữ liệu CỦA BẠN trên server và nạp 9 thông báo mẫu (email, LMS, Zalo, có cả spam).</Muted>
-        <Button
-          variant="ghost"
-          label="Nạp dữ liệu demo"
-          busy={busy === 'seed'}
-          onPress={() =>
-            run('seed', async () => {
-              const rs = await api.seed();
-              const made = rs.reduce((a, r) => a + r.created.length, 0);
-              const skip = rs.filter((r) => !r.relevant).length;
-              await refresh();
-              Alert.alert('Đã nạp', `${rs.length} thông báo → ${made} việc, bỏ qua ${skip} tin không liên quan.`);
-            })
-          }
-        />
-      </Card>
+        <Card>
+          <T v="title">Nhắc việc trên máy</T>
+          {notifSupported ? (
+            <>
+              <View style={styles.switchRow}>
+                <T v="small" style={{ flex: 1 }}>
+                  Nhắc trước hạn 3 ngày, 1 ngày, 2 giờ và đúng giờ
+                </T>
+                <Switch
+                  value={settings.remindersOn}
+                  onValueChange={(v) => updateSettings({ remindersOn: v })}
+                  trackColor={{ true: BRAND.lime, false: c.line }}
+                  thumbColor="#FFFFFF"
+                  accessibilityLabel="Nhắc việc trên máy"
+                />
+              </View>
+              <Muted>Đang hẹn {pending ?? scheduled} thông báo. Không cần mạng khi đến giờ nhắc.</Muted>
+              {Platform.OS === 'ios' && (
+                <Muted style={{ marginTop: 4 }}>
+                  iPhone: việc mới do máy chủ tự tạo có ngay khi mở app; khi app đóng, iOS quyết định lúc cập nhật nền.
+                </Muted>
+              )}
+              <View style={{ marginTop: 12 }}>
+                <Button
+                  small
+                  variant="outline"
+                  label="Gửi thông báo thử sau 5 giây"
+                  onPress={async () => {
+                    if (!(await sendTest(5))) Alert.alert('Chưa có quyền', 'Hãy cho phép MStudent gửi thông báo trong Cài đặt của máy.');
+                  }}
+                />
+              </View>
+            </>
+          ) : (
+            <Muted style={{ marginTop: 4 }}>Bản web không hỗ trợ nhắc việc. Hãy dùng app trên iOS/Android.</Muted>
+          )}
+        </Card>
 
-      <Card>
-        <Title>Xoá tài khoản</Title>
+        <Card>
+          <T v="title">Dữ liệu demo</T>
+          <Muted style={{ marginTop: 4, marginBottom: 12 }}>
+            Xoá dữ liệu của bạn trên máy chủ và nạp 9 thông báo mẫu (email, LMS, Zalo, có cả spam).
+          </Muted>
+          <Button
+            small
+            variant="dark"
+            label="Nạp dữ liệu demo"
+            busy={busy === 'seed'}
+            onPress={() =>
+              run('seed', async () => {
+                const rs = await api.seed();
+                const made = rs.reduce((a, r) => a + r.created.length, 0);
+                const skip = rs.filter((r) => !r.relevant).length;
+                await refresh();
+                Alert.alert('Đã nạp', `${rs.length} thông báo → ${made} việc, bỏ qua ${skip} tin không liên quan.`);
+              })
+            }
+          />
+        </Card>
+
         {showDelete ? (
-          <>
-            <Muted style={{ marginBottom: 8 }}>Xoá vĩnh viễn tài khoản, mọi việc, thông báo và quyền Gmail. Nhập email của bạn để xác nhận.</Muted>
+          <Card>
+            <T v="title" color={c.bad}>
+              Xoá tài khoản
+            </T>
+            <Muted style={{ marginTop: 4, marginBottom: 8 }}>
+              Xoá vĩnh viễn tài khoản, mọi việc, thông báo và quyền Gmail. Nhập email của bạn để xác nhận.
+            </Muted>
             <TextInput
               value={confirmEmail}
               onChangeText={setConfirmEmail}
@@ -216,44 +272,69 @@ export default function SettingsScreen() {
               autoCorrect={false}
               placeholder={user?.email}
               placeholderTextColor={c.muted}
-              style={[styles.input, { color: c.text, borderColor: c.line, backgroundColor: c.bg }]}
+              style={[styles.input, { color: c.text, backgroundColor: c.bg, fontFamily: FONT.regular }]}
+              accessibilityLabel="Nhập email để xác nhận xoá"
             />
             <View style={styles.rowButtons}>
               <View style={{ flex: 1 }}>
                 <Button
+                  small
+                  variant="dark"
                   label="Xoá vĩnh viễn"
                   busy={busy === 'del'}
                   disabled={confirmEmail.trim().toLowerCase() !== user?.email}
-                  onPress={() => run('del', async () => { await authApi.deleteAccount(confirmEmail.trim()); await signOut(); })}
+                  onPress={() =>
+                    run('del', async () => {
+                      await authApi.deleteAccount(confirmEmail.trim());
+                      await signOut();
+                    })
+                  }
                 />
               </View>
-              <Button variant="ghost" label="Huỷ" onPress={() => { setShowDelete(false); setConfirmEmail(''); }} />
+              <Button
+                small
+                variant="outline"
+                label="Huỷ"
+                onPress={() => {
+                  setShowDelete(false);
+                  setConfirmEmail('');
+                }}
+              />
             </View>
-          </>
+          </Card>
         ) : (
-          <Button variant="ghost" label="Xoá tài khoản và dữ liệu…" onPress={() => setShowDelete(true)} />
+          <Pressable onPress={() => setShowDelete(true)} accessibilityRole="button" style={{ alignSelf: 'center', padding: 8 }}>
+            <T v="small" color={c.bad} style={{ fontFamily: FONT.semibold }}>
+              Xoá tài khoản và dữ liệu…
+            </T>
+          </Pressable>
         )}
-      </Card>
-
-      <Muted style={{ textAlign: 'center' }}>MStudent · {Platform.OS}</Muted>
+      </View>
     </ScrollView>
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
+function Stat({ value, label, tone }: { value: number; label: string; tone?: string }) {
   const c = usePalette();
+  const onTone = !!tone;
   return (
-    <View style={[styles.stat, { backgroundColor: c.soft }]}>
-      <Text style={{ color: c.text, fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{value}</Text>
-      <Text style={{ color: c.muted, fontSize: 12 }}>{label}</Text>
+    <View style={[styles.stat, { backgroundColor: tone ?? c.soft }]}>
+      <T style={{ fontFamily: FONT.bold, fontSize: 24, fontVariant: ['tabular-nums'] }} color={onTone ? BRAND.ink : c.text}>
+        {value}
+      </T>
+      <T style={{ fontSize: 12 }} color={onTone ? BRAND.ink : c.muted}>
+        {label}
+      </T>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, fontSize: 15 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  rowButtons: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
+  hero: { backgroundColor: BRAND.cobalt, paddingHorizontal: SCREEN_PAD, paddingBottom: 20, gap: 14, borderBottomLeftRadius: 36, borderBottomRightRadius: 36 },
+  account: { borderRadius: 28, padding: 18, gap: 2 },
+  input: { height: 48, borderRadius: 16, paddingHorizontal: 14, fontSize: 15 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 6 },
+  rowButtons: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  stat: { flexBasis: '31%', flexGrow: 1, borderRadius: 10, padding: 10 },
+  stat: { flexBasis: '31%', flexGrow: 1, borderRadius: 20, padding: 12, gap: 2 },
 });

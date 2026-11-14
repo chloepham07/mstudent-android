@@ -1,11 +1,13 @@
-// Đăng nhập / đăng ký. Bước 1: kết nối server (chạy trên máy tính trong cùng mạng). Bước 2: tài khoản.
+// Đăng nhập / đăng ký (UI Kit, artboard "1 · Đăng nhập"): nền coban, tiêu đề Baloo 2, Meme; tấm trắng với tab
+// Đăng nhập / Đăng ký. Địa chỉ máy chủ đã điền sẵn (bản build) → ẩn sau "Đổi máy chủ"; lỗi kết nối thì tự mở ra.
 
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, Muted } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Meme } from '@/components/Mascot';
+import { Button, Display, Muted, T } from '@/components/ui';
+import { BRAND, FONT, SCREEN_PAD, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
 import { googleAvailable } from '@/lib/google';
 import { useStore } from '@/lib/store';
@@ -14,21 +16,21 @@ import { normalizeUrl } from '@/lib/url';
 
 export default function LoginScreen() {
   const c = usePalette();
+  const insets = useSafeAreaInsets();
   const { settings, updateSettings, signIn, signUp, signInWithGoogle } = useStore();
   const [url, setUrl] = useState(settings.baseUrl);
   const [server, setServer] = useState<{ health: Health; cfg: PublicConfig } | null>(null);
   const [serverErr, setServerErr] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [editServer, setEditServer] = useState(!settings.baseUrl);
   const [register, setRegister] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
   const [probe, setProbe] = useState(0); // tăng lên để kiểm tra lại cùng một địa chỉ
 
-  // Bấm "Kết nối": lưu địa chỉ; effect bên dưới sẽ gọi thử server.
   const check = useCallback(
     async (value: string) => {
       const normalized = normalizeUrl(value);
@@ -55,6 +57,7 @@ export default function LoginScreen() {
         if (!alive) return;
         setServer(null);
         setServerErr(e.message);
+        setEditServer(true);
       })
       .finally(() => alive && setChecking(false));
     return () => {
@@ -88,104 +91,153 @@ export default function LoginScreen() {
     }
   }
 
-  const input = [styles.input, { color: c.text, borderColor: c.line, backgroundColor: c.bg }];
+  const input = [styles.input, { color: c.text, backgroundColor: c.soft, fontFamily: FONT.regular }];
   const canSubmit = !!server && email.includes('@') && password.length >= 8;
+  const host = settings.baseUrl.replace(/^https?:\/\//, '');
+  const live = server?.health.mode === 'llm';
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-          <View style={{ alignItems: 'center', gap: 4, marginBottom: 8 }}>
-            <Text style={{ fontSize: 44 }}>📥</Text>
-            <Text style={{ color: c.text, fontSize: 26, fontWeight: '700' }}>MStudent</Text>
-            <Muted style={{ textAlign: 'center' }}>AI đọc thông báo từ email, LMS, Zalo và nhắc bạn đúng hạn</Muted>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BRAND.cobalt }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
+        <View style={{ paddingTop: insets.top + 28, paddingHorizontal: 24, minHeight: 360 }}>
+          <Display size={42}>{'Mọi thông báo,\ngọn trong\nmột chỗ'}</Display>
+          <View style={styles.hero} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={[styles.blob, { backgroundColor: BRAND.pink, right: 24, top: 70, width: 44, height: 44 }]} />
+            <View style={[styles.blob, { backgroundColor: BRAND.periwinkle, left: 0, top: 110, width: 48, height: 48 }]} />
+            <View style={styles.speech}>
+              <T style={{ fontFamily: FONT.display, fontSize: 22 }} color={BRAND.cobalt}>
+                Bắt đầu nào!
+              </T>
+            </View>
+            <Meme size={170} wave />
+          </View>
+        </View>
+
+        <View style={[styles.sheet, { backgroundColor: c.surface, paddingBottom: insets.bottom + 24 }]}>
+          <View style={[styles.segment, { backgroundColor: c.soft }]} accessibilityRole="tablist">
+            {(['Đăng nhập', 'Đăng ký'] as const).map((label, i) => {
+              const on = (i === 1) === register;
+              return (
+                <Pressable
+                  key={label}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  onPress={() => {
+                    setRegister(i === 1);
+                    setErr(null);
+                  }}
+                  disabled={i === 1 && server?.cfg.registration_open === false}
+                  style={[styles.segBtn, on && { backgroundColor: c.active }]}>
+                  <T style={{ fontFamily: on ? FONT.semibold : FONT.medium, fontSize: 14 }} color={on ? (c.active === BRAND.ink ? '#FFFFFF' : BRAND.ink) : c.text}>
+                    {label}
+                  </T>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <Card>
-            <Text style={[styles.step, { color: c.muted }]}>1 · MÁY CHỦ</Text>
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              onSubmitEditing={() => check(url)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="vd: 192.168.1.5:8000"
-              placeholderTextColor={c.muted}
-              style={input}
-              accessibilityLabel="Địa chỉ server"
-            />
-            <View style={{ marginTop: 8 }}>
-              <Button variant="ghost" label={server ? 'Kiểm tra lại' : 'Kết nối'} busy={checking} disabled={!url.trim()} onPress={() => check(url)} />
-            </View>
-            {server && (
-              <Text style={{ color: server.health.mode === 'llm' ? c.ok : c.medium, marginTop: 8 }}>
-                {server.health.mode === 'llm'
-                  ? `✓ Đã kết nối · AI trực tiếp (${server.health.model})`
-                  : '✓ Đã kết nối · ⚠️ server đang chạy bằng luật, chưa bật AI'}
-              </Text>
-            )}
-            {serverErr && <Text style={{ color: c.bad, marginTop: 8 }}>✗ {serverErr}</Text>}
-            {!server && (
-              <Muted style={{ marginTop: 8 }}>
-                Chạy `python run_local.py` trên máy tính rồi nhập địa chỉ nó in ra. Điện thoại và máy tính cùng Wi-Fi/hotspot.
-              </Muted>
-            )}
-          </Card>
-
-          <Card style={{ opacity: server ? 1 : 0.5 }}>
-            <Text style={[styles.step, { color: c.muted }]}>2 · {register ? 'TẠO TÀI KHOẢN' : 'ĐĂNG NHẬP'}</Text>
-            {register && (
-              <TextInput value={name} onChangeText={setName} placeholder="Tên của bạn" placeholderTextColor={c.muted} style={[input, styles.gap]} maxLength={100} editable={!!server} />
-            )}
+          {register && (
+            <Field label="Tên">
+              <TextInput value={name} onChangeText={setName} placeholder="Tên của bạn" placeholderTextColor={c.muted} style={input} maxLength={100} />
+            </Field>
+          )}
+          <Field label="Email">
             <TextInput
               value={email}
               onChangeText={setEmail}
-              placeholder="Email"
+              placeholder="ban@sv.edu.vn"
               placeholderTextColor={c.muted}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
               autoComplete="email"
               textContentType="username"
-              style={[input, styles.gap]}
-              editable={!!server}
+              style={input}
             />
+          </Field>
+          <Field label="Mật khẩu">
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Mật khẩu (ít nhất 8 ký tự)"
+              placeholder="Ít nhất 8 ký tự"
               placeholderTextColor={c.muted}
               secureTextEntry
               autoComplete={register ? 'new-password' : 'current-password'}
               textContentType={register ? 'newPassword' : 'password'}
-              style={[input, styles.gap]}
+              style={input}
               maxLength={128}
-              editable={!!server}
               onSubmitEditing={() => canSubmit && submit()}
             />
-            {err && <Text style={{ color: c.bad, marginBottom: 8 }}>⚠️ {err}</Text>}
-            <Button label={register ? 'Đăng ký' : 'Đăng nhập'} busy={busy} disabled={!canSubmit} onPress={submit} />
-            {server?.cfg.google.enabled && googleAvailable && (
-              <View style={{ marginTop: 8 }}>
-                <Button variant="ghost" label="Tiếp tục với Google" disabled={busy} onPress={google} />
-              </View>
-            )}
-            {(!register || server?.cfg.registration_open !== false) && (
-              <Pressable onPress={() => { setRegister((r) => !r); setErr(null); }} style={{ marginTop: 12, alignItems: 'center' }} accessibilityRole="button">
-                <Text style={{ color: c.accent }}>{register ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}</Text>
-              </Pressable>
-            )}
-          </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </Field>
+          {err && <T v="small" color={c.bad}>{err}</T>}
+          <Button label={register ? 'Đăng ký' : 'Đăng nhập'} busy={busy} disabled={!canSubmit} onPress={submit} />
+          {server?.cfg.google.enabled && googleAvailable && (
+            <Button variant="outline" label="Tiếp tục với Google" disabled={busy} onPress={google} />
+          )}
+
+          {editServer ? (
+            <View style={{ gap: 8, marginTop: 4 }}>
+              <T v="label" color={c.muted}>
+                MÁY CHỦ
+              </T>
+              <TextInput
+                value={url}
+                onChangeText={setUrl}
+                onSubmitEditing={() => check(url)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://… hoặc 192.168.1.5:8000"
+                placeholderTextColor={c.muted}
+                style={input}
+                accessibilityLabel="Địa chỉ máy chủ"
+              />
+              <Button variant="ghost" small label={server ? 'Kiểm tra lại' : 'Kết nối'} busy={checking} disabled={!url.trim()} onPress={() => check(url)} />
+              {serverErr && <T v="small" color={c.bad}>Không kết nối được: {serverErr}</T>}
+              {!server && <Muted>Nhập địa chỉ máy chủ MStudent (bản production đã điền sẵn).</Muted>}
+            </View>
+          ) : (
+            <Pressable onPress={() => setEditServer(true)} accessibilityRole="button" style={styles.serverLine}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: !server ? c.muted : live ? '#1A9E6A' : BRAND.amberInk }} />
+              <T style={{ fontSize: 12 }} color={c.muted} numberOfLines={1}>
+                {host} · {checking || !server ? 'đang kết nối…' : live ? 'AI trực tiếp' : 'Bộ luật (offline)'} · Đổi máy chủ
+              </T>
+            </Pressable>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const c = usePalette();
+  return (
+    <View style={{ gap: 4 }}>
+      <T style={{ fontFamily: FONT.semibold, fontSize: 12 }} color={c.muted}>
+        {label}
+      </T>
+      {children}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: 16, gap: 12, flexGrow: 1, justifyContent: 'center', maxWidth: 480, width: '100%', alignSelf: 'center' },
-  step: { fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 16 },
-  gap: { marginBottom: 8 },
+  hero: { height: 230, alignItems: 'center', justifyContent: 'flex-end' },
+  blob: { position: 'absolute', borderRadius: 999 },
+  speech: {
+    position: 'absolute',
+    left: 4,
+    top: 6,
+    backgroundColor: BRAND.mint,
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    transform: [{ rotate: '-8deg' }],
+  },
+  sheet: { flex: 1, borderTopLeftRadius: 36, borderTopRightRadius: 36, paddingTop: 22, paddingHorizontal: 24, gap: 12 },
+  segment: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 16 },
+  segBtn: { flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  input: { height: 50, borderRadius: 16, paddingHorizontal: 16, fontSize: 15 },
+  serverLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6, marginTop: 2, paddingHorizontal: SCREEN_PAD },
 });

@@ -1,83 +1,80 @@
+// Thanh tab nổi theo UI Kit: thẻ trắng bo 34, bóng 0 8 24; mục đang chọn là vòng tròn đen, icon vàng chanh
+// (chế độ tối: vòng vàng chanh, icon mực). Mỗi màn tự vẽ tiêu đề của mình nên tắt header mặc định.
+
+import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Tabs } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { type ColorValue, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { Icon, type IconName } from '@/components/Icon';
 import { usePalette } from '@/constants/theme';
-import { useStore } from '@/lib/store';
 
-type Icon = { ios: string; android: string; web: string };
+const TABS: Record<string, { label: string; icon: IconName }> = {
+  index: { label: 'Trợ lý', icon: 'chat' },
+  tasks: { label: 'Việc', icon: 'tasks' },
+  calendar: { label: 'Lịch', icon: 'calendar' },
+  settings: { label: 'Cài đặt', icon: 'settings' },
+};
 
-function TabIcon({ name, color }: { name: Icon; color: ColorValue }) {
-  // Tên icon: SF Symbols (iOS) và Material Symbols (Android/web).
-  return <SymbolView name={name as any} tintColor={color} size={26} />;
-}
-
-/** Cho biết AI có đang chạy trực tiếp trên server không. */
-function AiPill() {
+function FloatingTabBar({ state, navigateToTab }: BottomTabBarProps) {
   const c = usePalette();
-  const { health, error } = useStore();
-  const live = health?.mode === 'llm';
-  const label = !health ? (error ? 'Mất kết nối' : '…') : live ? 'AI trực tiếp' : 'AI chưa bật';
-  const color = !health ? c.muted : live ? c.ok : c.medium;
+  const insets = useSafeAreaInsets();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 14 }} accessibilityLabel={label}>
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-      <Text style={{ color, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+    <View
+      accessibilityRole="tablist"
+      style={{
+        position: 'absolute',
+        left: 24,
+        right: 24,
+        bottom: Math.max(insets.bottom, 12) + 8,
+        height: 68,
+        borderRadius: 34,
+        backgroundColor: c.surface,
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        shadowColor: '#141414',
+        shadowOpacity: c.bg === '#FFFFFF' ? 0.12 : 0.5,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+      }}>
+      {state.routes.map((route, i) => {
+        const tab = TABS[route.name];
+        if (!tab) return null;
+        const focused = state.index === i;
+        return (
+          <Pressable
+            key={route.key}
+            accessibilityRole="tab"
+            accessibilityLabel={tab.label}
+            accessibilityState={{ selected: focused }}
+            onPress={() => {
+              if (!focused) navigateToTab(route.key);
+            }}
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 26,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: focused ? c.active : 'transparent',
+            }}>
+            <Icon name={tab.icon} color={focused ? c.onActive : c.muted} />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 export default function TabLayout() {
-  const c = usePalette();
-  const headerShown = useClientOnlyValue(false, true);
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: c.accent,
-        tabBarInactiveTintColor: c.muted,
-        tabBarStyle: { backgroundColor: c.panel, borderTopColor: c.line },
-        headerStyle: { backgroundColor: c.panel },
-        headerTintColor: c.text,
-        headerShown,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Trợ lý',
-          headerRight: () => <AiPill />,
-          tabBarIcon: ({ color }) => (
-            <TabIcon color={color} name={{ ios: 'bubble.left.and.bubble.right', android: 'chat', web: 'chat' }} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          title: 'Việc',
-          tabBarIcon: ({ color }) => (
-            <TabIcon color={color} name={{ ios: 'checklist', android: 'checklist', web: 'checklist' }} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'Lịch',
-          tabBarIcon: ({ color }) => (
-            <TabIcon color={color} name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Cài đặt',
-          tabBarIcon: ({ color }) => (
-            <TabIcon color={color} name={{ ios: 'gearshape', android: 'settings', web: 'settings' }} />
-          ),
-        }}
-      />
+    <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false }}>
+      <Tabs.Screen name="index" options={{ title: 'Trợ lý' }} />
+      <Tabs.Screen name="tasks" options={{ title: 'Việc' }} />
+      <Tabs.Screen name="calendar" options={{ title: 'Lịch' }} />
+      <Tabs.Screen name="settings" options={{ title: 'Cài đặt' }} />
     </Tabs>
   );
 }

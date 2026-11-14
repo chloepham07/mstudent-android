@@ -1,16 +1,19 @@
-// Màn hình nhận nội dung chia sẻ từ Zalo/app khác (hoặc dán tay) → chạy pipeline agent → xem kết quả.
+// Màn Dán / chia sẻ thông báo (UI Kit, artboard "5 · Dán / chia sẻ thông báo"): nền coban + tấm trắng; nhận nội dung
+// chia sẻ từ Zalo/app khác, deep link Phím tắt iOS, hoặc dán tay → chạy pipeline agent → xem kết quả.
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, Chip, Muted, TaskRow, Title } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Icon } from '@/components/Icon';
+import { Button, Chip, Display, ModePill, Muted, T, TaskCard } from '@/components/ui';
+import { BRAND, FONT, SCREEN_PAD, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
 import { parseShareLink } from '@/lib/sharelink';
 import { useStore } from '@/lib/store';
-import { CATEGORY_LABEL, type IngestResult, type Source } from '@/lib/types';
+import { type IngestResult, type Source } from '@/lib/types';
 
 const SOURCES: { key: Source; label: string }[] = [
   { key: 'zalo', label: 'Zalo' },
@@ -19,8 +22,11 @@ const SOURCES: { key: Source; label: string }[] = [
   { key: 'manual', label: 'Khác' },
 ];
 
+const AGENT_LABEL: Record<string, string> = { Triage: 'Lọc tin', Extractor: 'Trích việc', Planner: 'Lên lịch' };
+
 export default function ShareScreen() {
   const c = usePalette();
+  const insets = useSafeAreaInsets();
   const { refresh, now } = useStore();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   // Nguồn 2: deep link mstudent://share?text=… từ Phím tắt iOS (bản không có share extension).
@@ -59,10 +65,33 @@ export default function ShareScreen() {
     }
   }
 
+  const tasks = result ? [...result.created, ...result.updated] : [];
+  const status = !result
+    ? null
+    : result.duplicate
+      ? 'Đã xử lý tin này rồi'
+      : !result.relevant
+        ? 'Không cần làm gì'
+        : result.updated.length && !result.created.length
+          ? 'Đã cập nhật việc có sẵn'
+          : 'Đã tạo việc';
+
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
-      <Card>
-        <Title>{hasShareIntent ? 'Nội dung được chia sẻ' : 'Dán thông báo'}</Title>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BRAND.cobalt }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Display size={32}>{hasShareIntent ? 'Chia sẻ thông báo' : 'Dán thông báo'}</Display>
+        <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Đóng" style={styles.close}>
+          <Icon name="close" color="#FFFFFF" size={20} stroke={2.4} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={[styles.sheet, { backgroundColor: c.surface }]}
+        contentContainerStyle={{ padding: SCREEN_PAD, paddingTop: 22, paddingBottom: insets.bottom + 28, gap: 14 }}
+        keyboardShouldPersistTaps="handled">
+        <T v="label" color={c.muted}>
+          {hasShareIntent || link ? 'NỘI DUNG ĐƯỢC CHIA SẺ' : 'NỘI DUNG THÔNG BÁO'}
+        </T>
         <TextInput
           value={text}
           onChangeText={(v) => {
@@ -72,48 +101,66 @@ export default function ShareScreen() {
           multiline
           placeholder="vd: Thứ 6 tuần này nộp bài tập tuần 9 nhé"
           placeholderTextColor={c.muted}
-          style={[styles.input, { color: c.text, borderColor: c.line, backgroundColor: c.bg }]}
+          style={[styles.input, { color: c.text, backgroundColor: c.soft, fontFamily: FONT.regular }]}
           accessibilityLabel="Nội dung thông báo"
         />
-        <View style={styles.sources}>
+        <View style={styles.sources} accessibilityRole="radiogroup" accessibilityLabel="Nguồn">
           {SOURCES.map((s) => (
             <Chip key={s.key} label={s.label} active={source === s.key} onPress={() => setSource(s.key)} />
           ))}
         </View>
-        <Button label="Phân tích bằng agent" busy={busy} disabled={!text.trim()} onPress={analyze} />
-        {err && <Text style={{ color: c.bad, marginTop: 8 }}>⚠️ {err}</Text>}
-      </Card>
+        <Button label="Phân tích bằng AI" busy={busy} disabled={!text.trim()} onPress={analyze} />
+        {err && <T v="small" color={c.bad}>{err}</T>}
 
-      {result && (
-        <Card>
-          <Title>{result.duplicate ? '↺ Đã xử lý tin này rồi' : result.relevant ? `✓ ${CATEGORY_LABEL[result.category]}` : '✗ Không cần làm gì'}</Title>
-          <Muted>
-            {result.reason} · {result.mode === 'llm' ? 'AI trực tiếp' : result.mode === 'cache' ? 'không chạy lại agent' : 'bộ luật (AI chưa bật)'}
-          </Muted>
-          {result.created.map((t) => (
-            <TaskRow key={`c${t.id}`} task={t} now={now} />
-          ))}
-          {result.updated.map((t) => (
-            <TaskRow key={`u${t.id}`} task={t} now={now} />
-          ))}
-          {result.updated.length > 0 && <Muted>↻ Đã cập nhật việc có sẵn thay vì tạo trùng.</Muted>}
-          <Text style={[styles.traceHead, { color: c.muted }]}>Các agent đã chạy</Text>
-          {result.trace.map((s, i) => (
-            <Text key={i} style={[styles.trace, { color: s.error ? c.bad : c.text }]}>
-              {i + 1}. {s.agent} · {s.kind} · {s.ms} ms{s.error ? ` — ${s.error}` : ''}
-            </Text>
-          ))}
-        </Card>
-      )}
+        {result && (
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <View style={[styles.status, { backgroundColor: c.active }]}>
+                <Icon name="check" color={c.onActive} size={14} stroke={2.6} />
+                <T style={{ fontFamily: FONT.semibold, fontSize: 12 }} color={c.onActive}>
+                  {status}
+                </T>
+              </View>
+              <ModePill live={result.mode === 'llm'} label={result.mode === 'cache' ? 'Không chạy lại agent' : undefined} />
+            </View>
+            {tasks.map((t, i) => (
+              <TaskCard key={`${t.id}-${i}`} task={t} now={now} overlap={i > 0} />
+            ))}
+            {!tasks.length && <Muted>{result.reason}</Muted>}
+            {result.updated.length > 0 && <Muted>Đã cập nhật việc có sẵn thay vì tạo trùng.</Muted>}
 
-      <Button variant={result ? 'primary' : 'ghost'} label={result ? 'Xong' : 'Đóng'} onPress={close} />
-    </ScrollView>
+            <T v="label" color={c.muted} style={{ marginTop: 4 }}>
+              CÁC AGENT ĐÃ CHẠY · {result.mode.toUpperCase()}
+            </T>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {result.trace.map((s, i) => (
+                <View key={i} style={[styles.agent, { backgroundColor: s.error ? BRAND.amber : BRAND.mint }]}>
+                  <T style={{ fontFamily: FONT.semibold, fontSize: 12 }} color={BRAND.ink}>
+                    {AGENT_LABEL[s.agent] ?? s.agent}
+                  </T>
+                  <T style={{ fontSize: 12 }} color={s.error ? BRAND.amberInk : BRAND.mintInk}>
+                    {s.error ? 'lỗi → luật' : `${(s.ms / 1000).toFixed(1).replace('.', ',')} giây`}
+                  </T>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <View style={{ marginTop: 8 }}>
+          <Button variant={result ? 'dark' : 'outline'} label={result ? 'Xong' : 'Đóng'} onPress={close} />
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 120, borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 15, textAlignVertical: 'top' },
-  sources: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 10 },
-  traceHead: { marginTop: 12, marginBottom: 4, fontSize: 13, fontWeight: '600' },
-  trace: { fontSize: 13, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) },
+  header: { paddingHorizontal: SCREEN_PAD, paddingBottom: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  close: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  sheet: { flex: 1, borderTopLeftRadius: 36, borderTopRightRadius: 36 },
+  input: { minHeight: 110, borderRadius: 20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, fontSize: 15, lineHeight: 22, textAlignVertical: 'top' },
+  sources: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  agent: { flex: 1, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 2 },
 });

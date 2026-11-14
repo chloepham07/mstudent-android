@@ -1,17 +1,22 @@
-// Tab Việc: danh sách việc nhóm theo thời hạn + bản tin của Digest agent.
+// Tab Việc (UI Kit, artboard "3 · Việc"): tiêu đề + nút Thêm, Bản tin sáng (bạc hà), nhóm theo thời hạn,
+// thẻ việc màu theo ưu tiên xếp chồng nhau.
 
-import { router, Stack } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, ErrorBanner, Muted, TaskRow } from '@/components/ui';
-import { usePalette } from '@/constants/theme';
+import { Icon } from '@/components/Icon';
+import { Meme } from '@/components/Mascot';
+import { Display, ErrorBanner, Muted, T, TaskCard } from '@/components/ui';
+import { BRAND, FONT, SCREEN_PAD, TAB_BAR_SPACE, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
 import { BUCKET_ORDER, bucketOf } from '@/lib/dates';
 import { useStore } from '@/lib/store';
 
 export default function TasksScreen() {
   const c = usePalette();
+  const insets = useSafeAreaInsets();
   const { tasks, now, loading, error, refresh, markDone, health } = useStore();
   const [digest, setDigest] = useState<string | null>(null);
   const [showDigest, setShowDigest] = useState(true);
@@ -37,57 +42,82 @@ export default function TasksScreen() {
   }, [tasks, now]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable onPress={() => router.push('/share')} hitSlop={10} style={{ marginRight: 16 }}>
-              <Text style={{ color: c.accent, fontSize: 16, fontWeight: '600' }}>＋ Thêm</Text>
-            </Pressable>
-          ),
-        }}
-      />
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top + 12 }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <T v="h1" accessibilityRole="header">
+          Việc của bạn
+        </T>
+        <Pressable
+          onPress={() => router.push('/share')}
+          accessibilityRole="button"
+          accessibilityLabel="Thêm thông báo"
+          style={{ height: 44, paddingHorizontal: 16, borderRadius: 22, backgroundColor: c.active, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon name="plus" color={c.onActive} size={18} stroke={2.6} />
+          <T style={{ fontFamily: FONT.semibold, fontSize: 14 }} color={c.onActive}>
+            Thêm
+          </T>
+        </Pressable>
+      </View>
       <SectionList
         sections={sections}
         keyExtractor={(t) => String(t.id)}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { refresh(); loadDigest(); }} />}
-        contentContainerStyle={{ padding: 12, paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => {
+              refresh();
+              loadDigest();
+            }}
+          />
+        }
+        contentContainerStyle={{ paddingHorizontal: SCREEN_PAD, paddingBottom: TAB_BAR_SPACE + insets.bottom }}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={
-          <View style={{ gap: 10, marginBottom: 6 }}>
+          <View style={{ gap: 12, marginBottom: 4 }}>
             {error && <ErrorBanner message={error} onRetry={refresh} />}
             {digest && (
-              <Card>
-                <Pressable onPress={() => setShowDigest((v) => !v)} style={styles.digestHead}>
-                  <Text style={{ color: c.text, fontWeight: '600', fontSize: 15 }}>☀️ Bản tin</Text>
-                  <Muted>{showDigest ? 'Thu gọn' : 'Mở'}</Muted>
-                </Pressable>
-                {showDigest && <Text style={{ color: c.text, marginTop: 6, lineHeight: 21 }}>{digest}</Text>}
-              </Card>
+              <View style={{ borderRadius: 24, backgroundColor: BRAND.mint, paddingVertical: 14, paddingHorizontal: 16, gap: 6 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Display size={20} color={BRAND.mintInk}>
+                    Bản tin sáng
+                  </Display>
+                  <Pressable onPress={() => setShowDigest((v) => !v)} hitSlop={12} accessibilityRole="button">
+                    <T style={{ fontFamily: FONT.semibold, fontSize: 12 }} color={BRAND.mintInk}>
+                      {showDigest ? 'Thu gọn' : 'Mở'}
+                    </T>
+                  </Pressable>
+                </View>
+                {showDigest && (
+                  <T style={{ fontSize: 14, lineHeight: 20 }} color={BRAND.mintInkDeep}>
+                    {digest}
+                  </T>
+                )}
+              </View>
             )}
           </View>
         }
         renderSectionHeader={({ section }) => (
-          <Text style={[styles.section, { color: section.title === 'Quá hạn' ? c.bad : c.muted }]}>
-            {section.title} · {section.data.length}
-          </Text>
+          <View style={{ marginTop: 14, marginBottom: 8 }}>
+            <T v="label" color={section.title === 'Quá hạn' ? c.bad : c.muted}>
+              {section.title.toUpperCase()} · {section.data.length}
+            </T>
+          </View>
         )}
-        renderItem={({ item }) => <TaskRow task={item} now={now} onDone={() => markDone(item.id)} />}
+        renderItem={({ item, index }) => (
+          <TaskCard task={item} now={now} overlap={index > 0} onDone={() => markDone(item.id)} />
+        )}
         ListEmptyComponent={
           !loading && !error ? (
-            <Card style={{ alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 28 }}>🎉</Text>
-              <Text style={{ color: c.text }}>Chưa có việc nào.</Text>
-              <Muted style={{ textAlign: 'center' }}>Chia sẻ một thông báo từ Zalo sang MStudent, bấm “＋ Thêm”, hoặc vào Cài đặt → Nạp dữ liệu demo.</Muted>
-            </Card>
+            <View style={{ borderRadius: 28, backgroundColor: c.soft, padding: 24, alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <Meme size={110} wave />
+              <T v="title">Chưa có việc nào</T>
+              <Muted style={{ textAlign: 'center' }}>
+                Chia sẻ một thông báo từ Zalo sang MStudent, bấm “Thêm”, hoặc kết nối nguồn tự động trong Cài đặt.
+              </Muted>
+            </View>
           ) : undefined
         }
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  section: { fontSize: 13, fontWeight: '600', marginTop: 14, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  digestHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-});

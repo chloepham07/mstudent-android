@@ -1,26 +1,69 @@
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+// Thành phần dùng chung theo MStudent UI Kit v1: không viền xám, tách khối bằng màu nền, bo 28/20/16/999,
+// chữ Lexend (Baloo 2 cho tiêu đề IN HOA), thẻ việc màu theo ưu tiên + nhân vật theo loại việc.
 
-import { usePalette } from '@/constants/theme';
-import { fmtDue, relativeDay } from '@/lib/dates';
+import type { ReactNode } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type TextProps,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
+
+import { CategoryCharacter } from '@/components/Mascot';
+import { Icon } from '@/components/Icon';
+import { BRAND, FONT, PRIORITY_BG, PRIORITY_LABEL, RADIUS, TYPE, usePalette } from '@/constants/theme';
+import { relativeDay } from '@/lib/dates';
 import { taskSourcesLabel } from '@/lib/sources';
 import { CATEGORY_LABEL, type Task } from '@/lib/types';
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+type Variant = keyof typeof TYPE;
+
+/** Chữ theo thang của UI Kit. Mặc định body, màu chữ chính của nền hiện tại. */
+export function T({ v = 'body', color, style, ...rest }: TextProps & { v?: Variant; color?: string; style?: StyleProp<TextStyle> }) {
   const c = usePalette();
-  return <View style={[s.card, { backgroundColor: c.panel, borderColor: c.line }, style]}>{children}</View>;
+  return <Text {...rest} style={[TYPE[v], { color: color ?? c.text }, style]} />;
+}
+
+/** Tiêu đề IN HOA Baloo 2 (màn chào, khối nổi bật). */
+export function Display({ children, size = 26, color, style }: { children: ReactNode; size?: number; color?: string; style?: StyleProp<TextStyle> }) {
+  return (
+    <Text style={[{ fontFamily: FONT.display, fontSize: size, lineHeight: size * 1.05, color: color ?? BRAND.lime }, style]}>
+      {typeof children === 'string' ? children.toUpperCase() : children}
+    </Text>
+  );
+}
+
+export function Card({ children, style, tone }: { children: ReactNode; style?: StyleProp<ViewStyle>; tone?: string }) {
+  const c = usePalette();
+  return <View style={[s.card, { backgroundColor: tone ?? c.soft }, style]}>{children}</View>;
 }
 
 export function Title({ children }: { children: ReactNode }) {
+  return <T v="title" style={{ marginBottom: 8 }}>{children}</T>;
+}
+
+export function SectionLabel({ children }: { children: ReactNode }) {
   const c = usePalette();
-  return <Text style={[s.title, { color: c.text }]}>{children}</Text>;
+  return (
+    <T v="label" color={c.muted} style={{ marginTop: 4 }}>
+      {typeof children === 'string' ? children.toUpperCase() : children}
+    </T>
+  );
 }
 
 export function Muted({ children, style }: { children: ReactNode; style?: StyleProp<any> }) {
   const c = usePalette();
-  return <Text style={[s.muted, { color: c.muted }, style]}>{children}</Text>;
+  return <T v="small" color={c.muted} style={style}>{children}</T>;
 }
 
+type ButtonVariant = 'primary' | 'dark' | 'outline' | 'ghost';
+
+/** Nút: chính (vàng chanh) · tối (đen, chữ vàng chanh; ở chế độ tối đổi thành vàng chanh) · viền · nhẹ. */
 export function Button({
   label,
   onPress,
@@ -28,128 +71,216 @@ export function Button({
   disabled,
   busy,
   small,
+  icon,
 }: {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'ghost';
+  variant?: ButtonVariant;
   disabled?: boolean;
   busy?: boolean;
   small?: boolean;
+  icon?: ReactNode;
 }) {
   const c = usePalette();
-  const primary = variant === 'primary';
+  const look: Record<ButtonVariant, { bg: string; fg: string; border?: string }> = {
+    primary: { bg: BRAND.lime, fg: BRAND.ink },
+    dark: { bg: c.active, fg: c.onActive },
+    outline: { bg: c.bg, fg: c.text, border: c.text },
+    ghost: { bg: c.soft, fg: c.text },
+  };
+  const l = look[variant];
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       onPress={onPress}
       disabled={disabled || busy}
       style={({ pressed }) => [
         s.btn,
         small && s.btnSmall,
-        primary ? { backgroundColor: c.accent } : { borderColor: c.line, borderWidth: 1 },
-        (pressed || disabled) && { opacity: 0.6 },
+        { backgroundColor: l.bg },
+        l.border ? { borderWidth: 2, borderColor: l.border } : null,
+        (pressed || disabled) && { opacity: 0.55 },
       ]}>
       {busy ? (
-        <ActivityIndicator color={primary ? c.onAccent : c.accent} />
+        <ActivityIndicator color={l.fg} />
       ) : (
-        <Text style={[s.btnText, small && { fontSize: 13 }, { color: primary ? c.onAccent : c.accent }]}>{label}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {icon}
+          <Text style={{ fontFamily: FONT.semibold, fontSize: small ? 13 : 16, color: l.fg }}>{label}</Text>
+        </View>
       )}
     </Pressable>
   );
 }
 
-export function Chip({ label, onPress, active }: { label: string; onPress?: () => void; active?: boolean }) {
+/** Chip (viên): đang chọn = nền đen/chữ trắng (tối: vàng chanh/mực); chưa chọn = nền sương. */
+export function Chip({ label, onPress, active, tone }: { label: string; onPress?: () => void; active?: boolean; tone?: string }) {
   const c = usePalette();
+  const bg = active ? c.active : (tone ?? c.soft);
+  const fg = active ? (c.active === BRAND.ink ? '#FFFFFF' : BRAND.ink) : tone ? BRAND.ink : c.text;
   return (
     <Pressable
       onPress={onPress}
-      style={[s.chip, { backgroundColor: active ? c.accent : c.accentSoft }]}
-      accessibilityRole={onPress ? 'button' : 'text'}>
-      <Text style={{ color: active ? c.onAccent : c.accent, fontSize: 13 }}>{label}</Text>
+      style={[s.chip, { backgroundColor: bg }]}
+      accessibilityRole={onPress ? 'button' : 'text'}
+      accessibilityState={onPress ? { selected: !!active } : undefined}>
+      <Text style={{ color: fg, fontSize: 13, fontFamily: active ? FONT.semibold : FONT.medium }}>{label}</Text>
     </Pressable>
   );
 }
 
+/** Nhãn nhỏ trên nền sương (loại việc, v.v.). */
 export function Tag({ label }: { label: string }) {
   const c = usePalette();
   return (
-    <View style={[s.tag, { borderColor: c.line }]}>
-      <Text style={{ color: c.muted, fontSize: 12 }}>{label}</Text>
+    <View style={[s.tag, { backgroundColor: c.soft }]}>
+      <Text style={{ color: c.text, fontSize: 12, fontFamily: FONT.semibold }}>{label}</Text>
+    </View>
+  );
+}
+
+/** Nhãn ưu tiên: luôn có chữ, không chỉ dựa vào màu. */
+export function PriorityTag({ priority }: { priority: Task['priority'] }) {
+  return (
+    <View style={[s.tag, { backgroundColor: PRIORITY_BG[priority] }]}>
+      <Text style={{ color: BRAND.ink, fontSize: 12, fontFamily: FONT.semibold }}>{PRIORITY_LABEL[priority]}</Text>
     </View>
   );
 }
 
 export function Dot({ priority }: { priority: Task['priority'] }) {
-  const c = usePalette();
-  return <View style={[s.dot, { backgroundColor: c[priority] }]} />;
+  return <View style={[s.dot, { backgroundColor: PRIORITY_BG[priority] }]} />;
+}
+
+/** "AI trực tiếp" (bạc hà, chấm xanh) hoặc "Bộ luật (offline)" (vàng) — kết quả luật không được gọi là AI. */
+export function ModePill({ live, label }: { live: boolean; label?: string }) {
+  return (
+    <View style={[s.pill, { backgroundColor: live ? BRAND.mint : BRAND.amber }]} accessibilityLabel={label ?? (live ? 'AI trực tiếp' : 'Bộ luật offline')}>
+      {live && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#1A9E6A' }} />}
+      <Text style={{ color: live ? BRAND.mintInk : BRAND.amberInk, fontSize: 13, fontFamily: FONT.semibold }}>
+        {label ?? (live ? 'AI trực tiếp' : 'Bộ luật (offline)')}
+      </Text>
+    </View>
+  );
 }
 
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const c = usePalette();
   return (
-    <View style={[s.error, { backgroundColor: c.accentSoft }]}>
-      <Text style={{ color: c.bad, flex: 1 }}>⚠️ {message}</Text>
+    <View style={[s.error, { backgroundColor: c.soft }]} accessibilityRole="alert">
+      <T v="small" color={c.bad} style={{ flex: 1 }}>
+        {message}
+      </T>
       {onRetry && <Button small variant="ghost" label="Thử lại" onPress={onRetry} />}
     </View>
   );
 }
 
-export function TaskRow({
+const TZ = 'Asia/Ho_Chi_Minh';
+const DOW: Record<string, string> = { Mon: 'T2', Tue: 'T3', Wed: 'T4', Thu: 'T5', Fri: 'T6', Sat: 'T7', Sun: 'CN' };
+
+/** "23:59" nếu hôm nay, ngược lại "08:00 T2" (giờ Việt Nam). */
+export function timeLabel(due: string | null, now: Date): string {
+  if (!due) return '';
+  const d = new Date(due);
+  const hm = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+  const day = (x: Date) => x.toLocaleDateString('en-CA', { timeZone: TZ });
+  if (day(d) === day(now)) return hm;
+  return `${hm} ${DOW[d.toLocaleDateString('en-US', { weekday: 'short', timeZone: TZ })] ?? ''}`.trim();
+}
+
+/**
+ * Thẻ việc: nền theo ưu tiên (giữ nguyên ở chế độ tối), chữ mực, nhân vật theo loại việc ló ở góc dưới,
+ * nút tròn đen "xong" ở góc phải. `overlap` để xếp chồng thẻ sau lên thẻ trước (-24).
+ */
+export function TaskCard({
   task,
   now,
   onDone,
   onLongPress,
+  overlap,
 }: {
   task: Task;
   now: Date;
   onDone?: () => void;
   onLongPress?: () => void;
+  overlap?: boolean;
 }) {
-  const c = usePalette();
+  const bg = PRIORITY_BG[task.priority];
+  const meta = [
+    PRIORITY_LABEL[task.priority],
+    CATEGORY_LABEL[task.category],
+    task.due_at ? relativeDay(task.due_at, now) : 'Không có hạn',
+    taskSourcesLabel(task.sources ?? [], task.source),
+  ].join(' · ');
   return (
-    <Pressable onLongPress={onLongPress} style={[s.row, { borderColor: c.line }]}>
-      <Dot priority={task.priority} />
-      <View style={{ flex: 1, gap: 4 }}>
-        <Text style={{ color: c.text, fontSize: 15 }} numberOfLines={2}>
+    <Pressable
+      onLongPress={onLongPress}
+      accessibilityHint={onLongPress ? 'Nhấn giữ để đổi hạn' : undefined}
+      style={[s.taskCard, { backgroundColor: bg }, overlap && { marginTop: -24 }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+        <Text style={[TYPE.title, { color: BRAND.ink, flex: 1 }]} numberOfLines={2}>
           {task.title}
         </Text>
-        <View style={s.metaRow}>
-          <Tag label={CATEGORY_LABEL[task.category]} />
-          <Text style={{ color: c.muted, fontSize: 13 }}>
-            {fmtDue(task.due_at)}
-            {task.due_at ? ` · ${relativeDay(task.due_at, now)}` : ''}
-            {task.location ? ` · ${task.location}` : ''}
-            {task.updated_from.length ? ' · đã cập nhật' : ''}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 12 }}>{taskSourcesLabel(task.sources ?? [], task.source)}</Text>
-        </View>
-        {task.note ? <Text style={{ color: c.muted, fontSize: 12, fontStyle: 'italic' }}>{task.note}</Text> : null}
+        <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: BRAND.ink }}>{timeLabel(task.due_at, now)}</Text>
+      </View>
+      <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: BRAND.ink, paddingRight: 56 }} numberOfLines={2}>
+        {meta}
+        {task.location ? ` · ${task.location}` : ''}
+        {task.updated_from.length ? ' · đã cập nhật' : ''}
+      </Text>
+      {task.note ? (
+        <Text style={{ fontFamily: FONT.regular, fontSize: 12, color: BRAND.ink, fontStyle: 'italic' }}>{task.note}</Text>
+      ) : null}
+      <View pointerEvents="none" style={s.character}>
+        <CategoryCharacter category={task.category} cardBg={bg} size={72} />
       </View>
       {onDone && (
         <Pressable
           onPress={onDone}
-          hitSlop={10}
+          hitSlop={8}
+          accessibilityRole="button"
           accessibilityLabel={`Đánh dấu xong: ${task.title}`}
-          style={[s.check, { borderColor: c.accent }]}>
-          <Text style={{ color: c.accent, fontSize: 16 }}>✓</Text>
+          style={s.done}>
+          <Icon name="check" color="#FFFFFF" size={20} stroke={2.6} />
         </Pressable>
       )}
     </Pressable>
   );
 }
 
+/** Giữ tên cũ cho các màn chưa đổi. */
+export const TaskRow = TaskCard;
+
 const s = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 14, padding: 14 },
-  title: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  muted: { fontSize: 13 },
-  btn: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  btnSmall: { paddingVertical: 5, paddingHorizontal: 10 },
-  btnText: { fontSize: 15, fontWeight: '600' },
-  chip: { borderRadius: 99, paddingVertical: 6, paddingHorizontal: 12 },
-  tag: { borderWidth: 1, borderRadius: 99, paddingHorizontal: 7, paddingVertical: 1 },
+  card: { borderRadius: 24, padding: 16 },
+  btn: { borderRadius: RADIUS.button, height: 52, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  btnSmall: { height: 40, paddingHorizontal: 14, borderRadius: 14 },
+  chip: { borderRadius: RADIUS.pill, height: 36, paddingHorizontal: 14, justifyContent: 'center' },
+  tag: { borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
   dot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
-  error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, marginBottom: 10 },
-  row: { flexDirection: 'row', gap: 10, paddingVertical: 11, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'flex-start' },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  check: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: RADIUS.tile, marginBottom: 10 },
+  taskCard: {
+    minHeight: 128,
+    borderRadius: RADIUS.card,
+    paddingTop: 22,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    overflow: 'hidden',
+    gap: 4,
+  },
+  character: { position: 'absolute', left: '40%', bottom: -10, opacity: 0.95 },
+  done: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BRAND.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

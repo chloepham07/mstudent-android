@@ -110,7 +110,11 @@ export default function SettingsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: health.mode === 'llm' ? '#1A9E6A' : BRAND.amberInk }} />
               <T style={{ fontFamily: FONT.semibold }} color={BRAND.mintInkDeep}>
-                {health.mode === 'llm' ? `Trực tiếp · ${health.model}` : 'Bộ luật (offline) — AI chưa bật'}
+                {health.mode !== 'llm'
+                  ? 'Bộ luật (offline) — AI chưa bật'
+                  : health.filter_model && health.filter_model !== health.model
+                    ? `Trực tiếp · lọc: ${health.filter_model} · trả lời: ${health.model}`
+                    : `Trực tiếp · ${health.model}`}
               </T>
             </View>
           ) : (
@@ -144,6 +148,14 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
+
+        <Card>
+          <T v="title">Hồ sơ học tập</T>
+          <Muted style={{ marginTop: 4 }}>Trường, bậc và ngành giúp MStudent đánh giá sự kiện nào có ích cho bạn.</Muted>
+          <View style={{ marginTop: 12 }}>
+            <Button variant="outline" label="Sửa trường / ngành" onPress={() => router.push('/profile')} />
+          </View>
+        </Card>
 
         <Card>
           <T v="title">Nguồn tự động</T>

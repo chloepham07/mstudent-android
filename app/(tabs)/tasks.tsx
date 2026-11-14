@@ -7,17 +7,57 @@ import { Pressable, RefreshControl, SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
+import { EventActions, InviteCard } from '@/components/InviteCard';
 import { Meme } from '@/components/Mascot';
 import { Display, ErrorBanner, Muted, T, TaskCard } from '@/components/ui';
 import { BRAND, FONT, SCREEN_PAD, TAB_BAR_SPACE, usePalette } from '@/constants/theme';
 import { api } from '@/lib/api';
 import { BUCKET_ORDER, bucketOf } from '@/lib/dates';
+import { sortInvites } from '@/lib/events';
+import type { PrefillValues } from '@/lib/prefill';
+import type { Task } from '@/lib/types';
 import { useStore } from '@/lib/store';
 
 export default function TasksScreen() {
   const c = usePalette();
   const insets = useSafeAreaInsets();
-  const { tasks, now, loading, error, refresh, markDone, health } = useStore();
+  const { tasks, invites, profile, user, respond, now, loading, error, refresh, markDone, health } = useStore();
+  const [answering, setAnswering] = useState<number | null>(null);
+  const [declined, setDeclined] = useState<Task[] | null>(null); // null = chưa mở mục "Đã bỏ qua"
+  const pending = useMemo(() => sortInvites(invites, now), [invites, now]);
+  // Dữ liệu điền sẵn form: lấy từ hồ sơ + tài khoản trên máy, chỉ dùng để dựng link mở form.
+  const prefill = useMemo<PrefillValues>(
+    () => ({
+      name: user?.name,
+      email: user?.email,
+      student_id: profile?.student_id,
+      class_name: profile?.class_name,
+      phone: profile?.phone,
+      school: profile?.school_name,
+      major: profile?.major_name,
+    }),
+    [user, profile],
+  );
+
+  const answer = useCallback(
+    async (id: number, going: boolean) => {
+      setAnswering(id);
+      try {
+        await respond(id, going);
+        if (declined) setDeclined(await api.events('declined').catch(() => declined));
+      } catch {
+        // lỗi mạng: lời mời vẫn còn đó, người dùng bấm lại
+      } finally {
+        setAnswering(null);
+      }
+    },
+    [respond, declined],
+  );
+
+  const toggleDeclined = useCallback(() => {
+    if (declined) setDeclined(null);
+    else api.events('declined').then(setDeclined).catch(() => setDeclined([]));
+  }, [declined]);
   const [digest, setDigest] = useState<string | null>(null);
   const [showDigest, setShowDigest] = useState(true);
 
@@ -75,6 +115,16 @@ export default function TasksScreen() {
         ListHeaderComponent={
           <View style={{ gap: 12, marginBottom: 4 }}>
             {error && <ErrorBanner message={error} onRetry={refresh} />}
+            {pending.length > 0 && (
+              <View style={{ gap: 10 }}>
+                <T v="label" color={c.muted}>
+                  SỰ KIỆN MỚI · {pending.length}
+                </T>
+                {pending.map((t) => (
+                  <InviteCard key={t.id} task={t} now={now} busy={answering === t.id} onAnswer={(going) => answer(t.id, going)} />
+                ))}
+              </View>
+            )}
             {digest && (
               <View style={{ borderRadius: 24, backgroundColor: BRAND.mint, paddingVertical: 14, paddingHorizontal: 16, gap: 6 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -103,11 +153,38 @@ export default function TasksScreen() {
             </T>
           </View>
         )}
-        renderItem={({ item, index }) => (
-          <TaskCard task={item} now={now} overlap={index > 0} onDone={() => markDone(item.id)} />
-        )}
+        renderItem={({ item, index, section }) => {
+          // Thẻ ngay sau một sự kiện đã tham gia không xếp chồng (để lộ nút Đăng ký / Mở link của sự kiện đó).
+          const prev = index > 0 ? section.data[index - 1] : null;
+          return (
+            <View>
+              <TaskCard task={item} now={now} overlap={index > 0 && prev?.rsvp !== 'going'} onDone={() => markDone(item.id)} />
+              {item.rsvp === 'going' && <EventActions task={item} values={prefill} />}
+            </View>
+          );
+        }}
+        ListFooterComponent={
+          <View style={{ marginTop: 18, gap: 8 }}>
+            <Pressable onPress={toggleDeclined} accessibilityRole="button" hitSlop={8}>
+              <T style={{ fontFamily: FONT.semibold, fontSize: 13 }} color={c.muted}>
+                {declined ? 'Ẩn sự kiện đã bỏ qua' : 'Xem sự kiện đã bỏ qua'}
+              </T>
+            </Pressable>
+            {declined?.length === 0 && <Muted>Chưa bỏ qua sự kiện nào.</Muted>}
+            {declined?.map((t) => (
+              <View key={t.id} style={{ borderRadius: 20, backgroundColor: c.soft, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <T style={{ flex: 1, fontSize: 14 }} numberOfLines={2}>
+                  {t.title}
+                </T>
+                <Pressable onPress={() => answer(t.id, true)} accessibilityRole="button" accessibilityLabel={`Tham gia: ${t.title}`} hitSlop={8}>
+                  <T style={{ fontFamily: FONT.semibold, fontSize: 13 }}>Tham gia</T>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        }
         ListEmptyComponent={
-          !loading && !error ? (
+          !loading && !error && pending.length === 0 ? (
             <View style={{ borderRadius: 28, backgroundColor: c.soft, padding: 24, alignItems: 'center', gap: 8, marginTop: 12 }}>
               <Meme size={110} wave />
               <T v="title">Chưa có việc nào</T>

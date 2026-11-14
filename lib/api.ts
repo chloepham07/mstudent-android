@@ -16,6 +16,7 @@ import type {
   Health,
   IngestResult,
   PublicConfig,
+  Profile,
   Source,
   SourceConnection,
   Stats,
@@ -224,6 +225,13 @@ export const api = {
     call<SourceConnection>(`/api/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
   deleteSource: (id: number) => call<{ ok: boolean }>(`/api/sources/${id}`, { method: 'DELETE' }),
   syncSourceNow: (id: number) => call<{ queued: boolean }>(`/api/sources/${id}/sync`, post()),
+  // 003: hồ sơ học tập + lời mời sự kiện
+  catalog: () => call<import('./catalog').Catalog>('/api/catalog', {}, 45000),
+  profile: () => call<Profile>('/api/profile'),
+  saveProfile: (p: Omit<Profile, 'needs_profile'>) => call<Profile>('/api/profile', { method: 'PUT', body: JSON.stringify(p) }),
+  snoozeProfile: () => call<{ ok: boolean }>('/api/profile/snooze', post()),
+  events: (state: 'pending' | 'going' | 'declined') => call<Task[]>(`/api/events?state=${state}`),
+  rsvp: (id: number, going: boolean) => call<Task>(`/api/tasks/${id}/rsvp`, post({ going })),
   pushRegister: (token: string, platform: 'ios' | 'android', notify: boolean) =>
     call<{ ok: boolean }>('/api/push/register', post({ token, platform, notify })),
   pushUnregister: (token: string, platform: 'ios' | 'android') =>

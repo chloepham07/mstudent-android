@@ -187,3 +187,102 @@ test('zaloFilter: chỉ gói Zalo + nhóm đã chọn, chống lặp 10 phút, c
   assert.equal(f.accept({ ...base, text: 'x'.repeat(MAX_CHARS + 10), postedAt: 99e6 })?.body.length, MAX_CHARS);
   assert.equal(new ZaloFilter([]).accept(base), null); // chưa chọn nhóm → không gửi gì
 });
+
+test('catalog: tìm trường theo viết tắt / tên không dấu, ngành theo bậc', async () => {
+  const { searchSchools, majorsFor, fold } = await import('../catalog');
+  const schools = [
+    { name: 'Đại học Bách khoa Hà Nội', abbr: 'HUST', en: '', group: '', place: '' },
+    { name: 'Trường Đại học Việt Nhật, ĐHQGHN', abbr: 'VNU-VJU', en: 'VNU Vietnam Japan University', group: '', place: '' },
+    { name: 'Trường Công nghệ Thông tin và Truyền thông, Đại học Bách khoa Hà Nội', abbr: 'SoICT', en: '', group: '', place: '' },
+    { name: 'Trường Đại học Kinh tế Quốc dân', abbr: 'NEU', en: '', group: '', place: '' },
+  ];
+  assert.equal(searchSchools(schools, 'vju')[0].abbr, 'VNU-VJU');
+  assert.equal(searchSchools(schools, 'hust')[0].abbr, 'HUST');
+  assert.equal(searchSchools(schools, 'bach khoa')[0].abbr, 'HUST'); // tên ngắn hơn lên trước
+  assert.equal(searchSchools(schools, 'viet nhat')[0].abbr, 'VNU-VJU');
+  assert.deepEqual(searchSchools(schools, '  '), []);
+  assert.equal(fold('Đại Học'), 'dai hoc');
+  const cat = {
+    schools,
+    majors: {
+      dai_hoc: [{ code: '7480101', name: 'Khoa học máy tính' }, { code: '7220209', name: 'Ngôn ngữ Nhật' }, { code: '7310613', name: 'Nhật Bản học' }],
+      thac_si: [{ code: '8480101', name: 'Khoa học máy tính' }],
+      tien_si: [],
+    },
+    programs: { 'VNU-VJU': { dai_hoc: [{ code: 'BJS', name: 'Nhật Bản học' }] } },
+    sources: {},
+  };
+  const vju = majorsFor(cat, 'VNU-VJU', 'dai_hoc', '');
+  assert.deepEqual(vju.own.map((m) => m.code), ['BJS']);
+  assert.ok(!vju.national.some((m) => m.name === 'Nhật Bản học')); // không lặp với chương trình của trường
+  assert.deepEqual(majorsFor(cat, 'HUST', 'dai_hoc', 'may tinh').national.map((m) => m.code), ['7480101']);
+  assert.deepEqual(majorsFor(cat, 'HUST', 'dai_hoc', '7220').national.map((m) => m.code), ['7220209']);
+  assert.deepEqual(majorsFor(cat, 'HUST', 'thac_si', '').national.length, 1);
+});
+
+// ---- 003: lời mời sự kiện ----
+
+import { inviteNotice, newInvites, openableUrl, sortInvites } from '../events';
+import { prefillCount, prefillUrl } from '../prefill';
+import type { FormMeta } from '../types';
+
+const FORM: FormMeta = {
+  form_id: '1FAIpQLSc' + 'a'.repeat(47),
+  fields: [
+    { entry: '111', role: 'name' },
+    { entry: '222', role: 'student_id' },
+    { entry: '333', role: 'email' },
+    { entry: '444', role: 'class_name' },
+    { entry: '555', role: 'phone' },
+  ],
+};
+
+test('prefillUrl: chỉ điền câu có dữ liệu, mã hoá URL, luôn trỏ docs.google.com', () => {
+  const url = prefillUrl(FORM, { name: 'Trần Văn Đạt & bạn', student_id: '21020001', email: 'a+b@vju.ac.vn', class_name: ' ', phone: '' })!;
+  assert.equal(
+    url,
+    `https://docs.google.com/forms/d/e/${FORM.form_id}/viewform?usp=pp_url&entry.111=${encodeURIComponent('Trần Văn Đạt & bạn')}&entry.222=21020001&entry.333=a%2Bb%40vju.ac.vn`,
+  );
+  assert.equal(new URL(url).searchParams.get('entry.111'), 'Trần Văn Đạt & bạn');
+  assert.equal(prefillCount(FORM, { name: 'A', student_id: '1' }), 2);
+  assert.equal(prefillUrl(FORM, {}), null); // không có gì để điền → dùng link gốc
+  assert.equal(prefillUrl(null, { name: 'A' }), null);
+});
+
+test('prefillUrl: form_meta lạ / bị chèn không tạo được link sang nơi khác', () => {
+  assert.equal(prefillUrl({ form_id: 'x/../../evil.vn?', fields: FORM.fields }, { name: 'A' }), null);
+  assert.equal(prefillUrl({ form_id: FORM.form_id, fields: [{ entry: '1&redirect=//evil.vn', role: 'name' }] }, { name: 'A' }), null);
+  assert.equal(prefillUrl({ form_id: FORM.form_id, fields: 'rác' } as unknown as FormMeta, { name: 'A' }), null);
+  const long = prefillUrl(FORM, { name: 'x'.repeat(1000) })!;
+  assert.ok(long.length < 400); // giá trị bị cắt 200 ký tự
+});
+
+test('sortInvites: hợp ngành trước, rồi theo giờ; ẩn sự kiện đã qua', () => {
+  const inv = (id: number, due: string | null, fit: Task['fit_level'], extra: Partial<Task> = {}) =>
+    task(id, due, [], { category: 'event', rsvp: 'pending', fit_level: fit, ...extra });
+  const list = [
+    inv(1, '2026-11-20T14:00:00+07:00', 'low'),
+    inv(2, '2026-11-25T09:00:00+07:00', 'high'),
+    inv(3, '2026-11-12T09:00:00+07:00', 'high'),
+    inv(4, '2026-11-10T09:00:00+07:00', 'high'), // đã qua
+    inv(5, null, 'medium'),
+    inv(6, '2026-11-13T09:00:00+07:00', null),
+    inv(7, '2026-11-11T07:00:00+07:00', 'medium', { event_end: '2026-11-11T10:00:00+07:00' }), // đang diễn ra
+  ];
+  assert.deepEqual(sortInvites(list, NOW).map((t) => t.id), [3, 2, 7, 5, 1, 6]);
+});
+
+test('openableUrl chỉ nhận http(s)', () => {
+  assert.equal(openableUrl(' https://vju.ac.vn/su-kien?x=1 '), 'https://vju.ac.vn/su-kien?x=1');
+  for (const bad of ['javascript:alert(1)', 'intent://x#Intent;end', 'file:///etc/passwd', 'https://', 'ftp://a.vn', '', null, 'https://user@evil.vn/x', 'https://a.vn b'])
+    assert.equal(openableUrl(bad), null);
+});
+
+test('newInvites / inviteNotice', () => {
+  const a = task(1, '2026-11-20T14:00:00+07:00', [], { title: 'Seminar AI', fit_level: 'high' });
+  const b = task(2, null, [], { title: 'Talkshow' });
+  assert.deepEqual(newInvites(null, [a, b]), []); // lần đầu không báo
+  assert.deepEqual(newInvites([1], [a, b]).map((t) => t.id), [2]);
+  assert.deepEqual(inviteNotice(a, 'T6 20/11 14:00'), { title: 'Sự kiện mới: Seminar AI', body: 'Rất hợp ngành · T6 20/11 14:00 · Tham gia không?' });
+  assert.equal(inviteNotice(b, '').body, 'chưa rõ giờ · Tham gia không?');
+});

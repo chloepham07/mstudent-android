@@ -9,11 +9,11 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { Platform } from 'react-native';
 
 import { api, ApiError, authApi, onSessionExpired, setBaseUrl } from './api';
-import { registerBackgroundRefresh, saveSnapshot, SETTINGS_KEY } from './background';
+import { registerBackgroundRefresh, saveSeenInvites, saveSnapshot, SETTINGS_KEY } from './background';
 import { googleSignIn, googleSignOut } from './google';
 import { clearReminders, ensurePermission, syncReminders } from './notifications';
 import { registerPush, unregisterPush } from './push';
-import type { Health, PublicConfig, Task, User } from './types';
+import type { Health, Profile, PublicConfig, Task, User } from './types';
 
 
 const USER_KEY = 'mstudent.user.v1';
@@ -37,6 +37,9 @@ interface Store {
   health: Health | null;
   now: Date; // giờ của server (để demo với MSTUDENT_NOW) hoặc giờ máy
   tasks: Task[];
+  invites: Task[]; // 003: lời mời sự kiện chưa trả lời
+  profile: Profile | null; // 003: trường / ngành (+ MSSV, lớp, SĐT để điền sẵn form trên máy)
+  respond: (id: number, going: boolean) => Promise<void>;
   loading: boolean;
   error: string | null;
   scheduled: number;
@@ -67,6 +70,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>({ baseUrl: DEFAULT_URL, remindersOn: true });
   const [health, setHealth] = useState<Health | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [invites, setInvites] = useState<Task[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduled, setScheduled] = useState(0);
@@ -87,6 +92,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     userRef.current = null;
     setUser(null);
     setTasks([]);
+    setInvites([]);
+    setProfile(null);
     setStatus('signedOut');
     await clearReminders().catch(() => {});
     setScheduled(0);
@@ -103,6 +110,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const list = await api.tasks();
       setTasks(list);
       setError(null);
+      // 003: lời mời + hồ sơ; máy chủ cũ chưa có các endpoint này → bỏ qua, không làm hỏng danh sách việc.
+      api
+        .events('pending')
+        .then((ev) => {
+          setInvites(ev);
+          saveSeenInvites(ev.map((t) => t.id));
+        })
+        .catch(() => {});
+      api.profile().then(setProfile).catch(() => {});
       if (userRef.current) AsyncStorage.setItem(tasksKey(userRef.current.id), JSON.stringify(list)).catch(() => {});
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401)) {
@@ -214,6 +230,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const respond = useCallback(
+    async (id: number, going: boolean) => {
+      try {
+        await api.rsvp(id, going);
+        setInvites((ev) => ev.filter((t) => t.id !== id));
+      } finally {
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
   const moveTask = useCallback(
     async (id: number, dueAt: string) => {
       await api.patch(id, { due_at: dueAt });
@@ -231,6 +259,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       health,
       now: new Date(Date.now() + nowOffset.current),
       tasks,
+      invites,
+      profile,
+      respond,
       loading,
       error,
       scheduled,
@@ -243,7 +274,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       markDone,
       moveTask,
     }),
-    [status, user, settings, updateSettings, health, tasks, loading, error, scheduled, signIn, signUp, signInWithGoogle, signOut, reloadUser, refresh, markDone, moveTask],
+    [status, user, settings, updateSettings, health, tasks, invites, profile, respond, loading, error, scheduled, signIn, signUp, signInWithGoogle, signOut, reloadUser, refresh, markDone, moveTask],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

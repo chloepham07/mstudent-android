@@ -7,6 +7,10 @@ import { planReminders, signature } from './reminders';
 import type { Task } from './types';
 
 const CHANNEL = 'reminders';
+/** Loại thông báo lời mời sự kiện (003): có 2 nút ngay trên thông báo. Trùng `categoryId` máy chủ gửi qua Expo Push. */
+export const INVITE_CATEGORY = 'event_invite';
+export const ACTION_GOING = 'going';
+export const ACTION_DECLINE = 'decline';
 let lastSignature = '';
 
 export const supported = Platform.OS !== 'web';
@@ -22,6 +26,16 @@ export function configureNotifications() {
       shouldSetBadge: false,
     }),
   });
+  // Mở app khi bấm nút để gọi máy chủ bằng phiên đang đăng nhập (không gọi mạng khi app đang đóng).
+  Notifications.setNotificationCategoryAsync(INVITE_CATEGORY, [
+    { identifier: ACTION_GOING, buttonTitle: 'Tham gia', options: { opensAppToForeground: true } },
+    { identifier: ACTION_DECLINE, buttonTitle: 'Không', options: { opensAppToForeground: true, isDestructive: true } },
+  ]).catch(() => {});
+}
+
+/** Bấm thông báo lời mời → trả lời nào? `null` = chỉ mở app (bấm vào thân thông báo). */
+export function inviteAnswer(actionId: string): boolean | null {
+  return actionId === ACTION_GOING ? true : actionId === ACTION_DECLINE ? false : null;
 }
 
 /** Xin quyền (Android 13+ cần có channel trước khi hỏi). Trả về true nếu được phép. */

@@ -4,12 +4,14 @@ import { Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
 import { Lexend_400Regular, Lexend_500Medium, Lexend_600SemiBold, Lexend_700Bold, useFonts } from '@expo-google-fonts/lexend';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+
+import { api } from '@/lib/api';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { FONT, PALETTES } from '@/constants/theme';
-import { configureNotifications } from '@/lib/notifications';
+import { configureNotifications, inviteAnswer } from '@/lib/notifications';
 import { StoreProvider, useStore } from '@/lib/store';
 
 export { ErrorBoundary } from 'expo-router';
@@ -42,9 +44,28 @@ function ShareRedirect() {
   return null;
 }
 
+/** Đăng nhập xong mà chưa có trường/ngành (và chưa bấm "Để sau" gần đây) → mở màn "Bạn học ở đâu?" một lần. */
+function ProfileRedirect() {
+  const { status } = useStore();
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    api
+      .profile()
+      .then((p) => {
+        if (p.needs_profile) router.push('/profile');
+      })
+      .catch(() => {});
+  }, [status]);
+  return null;
+}
+
 function RootNav() {
   const scheme = useColorScheme();
-  const { status } = useStore();
+  const { status, respond } = useStore();
+  const respondRef = useRef(respond);
+  useEffect(() => {
+    respondRef.current = respond;
+  }, [respond]);
   // Font của UI Kit: Lexend (mọi chữ) + Baloo 2 ExtraBold (tiêu đề IN HOA). Lỗi tải font → vẫn chạy bằng font hệ thống.
   const [fontsLoaded, fontError] = useFonts({
     Lexend_400Regular,
@@ -66,23 +87,47 @@ function RootNav() {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
-  // Bấm thông báo "việc mới" (đẩy từ máy chủ hoặc làm mới nền) → mở tab Việc (FR-077).
+  // Bấm thông báo "việc mới" → mở tab Việc (FR-077). Bấm nút Tham gia / Không trên lời mời (003) → trả lời rồi mở tab Việc.
+  const handled = useRef<string | null>(null);
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
-      if ((r.notification.request.content.data as { type?: string } | undefined)?.type === 'tasks') router.navigate('/tasks');
-    });
+    if (status !== 'signedIn') return;
+    const handle = (r: Notifications.NotificationResponse | null) => {
+      if (!r) return;
+      const key = `${r.notification.request.identifier}:${r.actionIdentifier}`;
+      if (handled.current === key) return; // cùng một lần bấm có thể tới qua cả hai đường dưới
+      handled.current = key;
+      const data = r.notification.request.content.data as { type?: string; task_id?: number } | undefined;
+      if (data?.type === 'invite') {
+        const going = inviteAnswer(r.actionIdentifier);
+        if (going !== null && typeof data.task_id === 'number') respondRef.current(data.task_id, going).catch(() => {});
+        router.navigate('/tasks');
+      } else if (data?.type === 'tasks') router.navigate('/tasks');
+    };
+    // App bị đóng hẳn rồi được mở bằng nút trên thông báo: lần bấm đó chỉ lấy được qua "phản hồi gần nhất".
+    try {
+      const last = Notifications.getLastNotificationResponse();
+      if (last) {
+        Notifications.clearLastNotificationResponse();
+        handle(last);
+      }
+    } catch {
+      // Expo Go / web không có API này
+    }
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
     return () => sub.remove();
-  }, []);
+  }, [status]);
   if (!ready) return null;
 
   const signedIn = status === 'signedIn';
   return (
     <ThemeProvider value={theme}>
       {SHARE_ENABLED && <ShareRedirect />}
+      <ProfileRedirect />
       <Stack>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="profile" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen
             name="sources"
             options={{

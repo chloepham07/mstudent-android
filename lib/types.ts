@@ -20,6 +20,17 @@ export interface Task {
   updated_from: string[];
   sources: string[]; // các nguồn đã góp vào việc (gộp giữa email / Classroom / bảng lớp…)
   note: string | null;
+  // 003: lời mời sự kiện (rsvp null = việc thường)
+  rsvp?: 'pending' | 'going' | 'declined' | null;
+  event_end?: string | null;
+  event_url?: string | null;
+  register_url?: string | null;
+  register_deadline?: string | null;
+  mandatory?: boolean;
+  fit_level?: 'high' | 'medium' | 'low' | null;
+  fit_reason?: string | null;
+  fit_mode?: string | null;
+  form_meta?: FormMeta | null;
 }
 
 export interface TraceStep {
@@ -62,7 +73,8 @@ export interface ChatResponse {
 export interface Health {
   ok: boolean;
   mode: 'llm' | 'offline';
-  model: string;
+  model: string; // model trả lời (trích việc, trợ lý…)
+  filter_model?: string; // model lọc thông báo; trùng `model` khi chưa bật Gemini Decision
   now: string;
 }
 
@@ -147,4 +159,28 @@ export interface SourceConnection {
   last_error: string | null;
   created_at: string;
   last: { created: number; updated: number; skipped: number; mode: string } | null;
+}
+
+// ---------------- 003: hồ sơ học tập ----------------
+
+export interface Profile {
+  school_name: string;
+  school_abbr: string;
+  degree_level: '' | 'dai_hoc' | 'thac_si' | 'tien_si';
+  major_code: string;
+  major_name: string;
+  student_id: string;
+  class_name: string;
+  phone: string;
+  needs_profile: boolean;
+}
+
+// ---- 003: form đăng ký sự kiện ----
+
+export type FormRole = 'name' | 'student_id' | 'email' | 'class_name' | 'school' | 'major' | 'phone';
+
+/** Cấu trúc form công khai do máy chủ đọc: câu nào (entry) hỏi thông tin gì (role). Không chứa dữ liệu cá nhân. */
+export interface FormMeta {
+  form_id: string;
+  fields: { entry: string; role: FormRole }[];
 }

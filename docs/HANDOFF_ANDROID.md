@@ -74,7 +74,7 @@ Lỗi gặp phải: ghi lại bước, ảnh chụp màn hình, giờ xảy ra. 
 - Không đưa bất kỳ khoá bí mật nào vào `` (khoá OpenAI chỉ nằm trên server).
 - `lib/url.ts` chỉ cho `http://` với địa chỉ mạng nội bộ — đừng nới lỏng.
 - Chạy `npm test && npm run typecheck && npx expo lint` trước khi commit. Mỗi PR một việc, vào nhánh riêng từ
-  `001-backend-production`, ví dụ `android-build-fixes`.
+  `main`, ví dụ `android-build-fixes`.
 
 ## 7. Những gì bạn KHÔNG cần và KHÔNG được xin
 
